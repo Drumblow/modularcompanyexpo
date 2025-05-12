@@ -23,6 +23,7 @@ interface TimeEntry {
   approved: boolean | null;
   rejected: boolean | null;
   rejectionReason?: string;
+  isPaid?: boolean;
   userId: string;
   createdAt: string;
   updatedAt: string;
@@ -45,6 +46,7 @@ interface User {
   name: string;
   email: string;
   role: string;
+  companyId?: string;
 }
 
 function TimeEntriesScreenComponent() {
@@ -64,6 +66,7 @@ function TimeEntriesScreenComponent() {
   const [submitting, setSubmitting] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [activeTab, setActiveTab] = useState<'team' | 'mine'>('mine');
   const [approvalModalVisible, setApprovalModalVisible] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<TimeEntry | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -77,9 +80,14 @@ function TimeEntriesScreenComponent() {
     try {
       const userString = await AsyncStorage.getItem('@ModularCompany:user');
       if (userString) {
-        const userData = JSON.parse(userString);
+        const userData: User = JSON.parse(userString);
         setUserRole(userData.role);
         setCurrentUser(userData);
+        if (userData.role === 'MANAGER') {
+          setActiveTab('team');
+        } else {
+          setActiveTab('mine');
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar dados do usuário:', error);
@@ -87,112 +95,95 @@ function TimeEntriesScreenComponent() {
   };
 
   const fetchTimeEntries = async () => {
+    if (!currentUser) {
+      console.log('Usuário atual não carregado, abortando fetchTimeEntries.');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+    setLoading(true);
     try {
       const token = await AsyncStorage.getItem('@ModularCompany:token');
       
       if (!token) {
         console.error('Token não encontrado');
-        return;
+        setTimeEntries([]); // Limpa as entradas se não houver token
+        throw new Error('Token não encontrado');
       }
       
-      // Obtém o role do usuário atual
-      const userString = await AsyncStorage.getItem('@ModularCompany:user');
-      if (!userString) {
-        console.error('Dados do usuário não encontrados');
-        return;
-      }
+      console.log('Fetching time entries for user:', currentUser.id, 'Role:', currentUser.role, 'Active Tab:', activeTab);
       
-      const userData = JSON.parse(userString);
-      const role = userData.role;
-      const companyId = userData.companyId;
-      setUserRole(role);
-      setCurrentUser(userData);
-      
-      console.log('Dados do usuário:', { id: userData.id, role, companyId });
-      
-      // Define o endpoint base para todos
       const endpoint = `${API_URL}/mobile-time-entries`;
-      
-      // Configuração dos parâmetros e headers
       const config = {
         headers: {
           Authorization: `Bearer ${token}`
         },
-        params: {} as Record<string, any>
+        params: { period: 'all' } as Record<string, any>
       };
       
-      // Adiciona parâmetros diferentes de acordo com o papel do usuário
-      if (role === 'ADMIN' || role === 'DEVELOPER') {
-        // Para admin e developer, inclui todos os detalhes e não filtra por usuário específico
+      // Parâmetro útil para todos os papéis que podem ver detalhes
+      if (currentUser.role === 'ADMIN' || currentUser.role === 'DEVELOPER' || currentUser.role === 'MANAGER') {
         config.params.includeUserDetails = true;
-        console.log('Buscando todos os registros da empresa como ADMIN/DEVELOPER');
-      } 
-      else if (role === 'MANAGER') {
-        // Para manager, busca registros gerenciados
-        config.params.managedUsers = true;
-        config.params.includeUserDetails = true;
-        console.log('Buscando registros gerenciados como MANAGER');
       }
-      // Para employee, não precisa de parâmetros adicionais - já retorna apenas os próprios registros
-      
-      console.log('Endpoint:', endpoint);
-      console.log('Parâmetros:', config.params);
+
+      if (currentUser.role === 'MANAGER') {
+        if (activeTab === 'mine') {
+          config.params.userId = currentUser.id;
+          // A API mobile doc sugere includeOwnEntries=true com userId para ver apenas os próprios.
+          // Se a API web/mobile já faz isso por padrão ao passar o userId do manager, ótimo.
+          // Caso contrário, este parâmetro pode ser necessário se a API espera.
+          config.params.includeOwnEntries = true; 
+          console.log('MANAGER: Buscando MINHAS HORAS. Params:', config.params);
+        } else { // activeTab === 'team'
+          // A API mobile doc sugere que, por padrão, manager não vê os seus.
+          // Se `managedUsers=true` for o parâmetro da API web para isso, usamos.
+          // Se a API web para manager, por padrão, já retorna apenas subordinados, não precisamos de managedUsers.
+          config.params.managedUsers = true; // Assumindo que este é o parâmetro para a API web/mobile
+          console.log('MANAGER: Buscando REGISTROS DA EQUIPE. Params:', config.params);
+        }
+      } else if (currentUser.role === 'ADMIN' || currentUser.role === 'DEVELOPER') {
+        // Admin/Developer pode precisar de filtros específicos se tiverem abas,
+        // por enquanto, busca geral (a API deve filtrar por empresa para Admin).
+        // Se eles tiverem uma aba 'mine', a lógica do manager (activeTab === 'mine') se aplicaria.
+        console.log('ADMIN/DEVELOPER: Buscando registros. Params:', config.params);
+      } else if (currentUser.role === 'EMPLOYEE') {
+        // Employee sempre vê apenas os seus, geralmente sem parâmetros extras, a API já filtra.
+        config.params.userId = currentUser.id; // Garantir que estamos buscando explicitamente pelo ID do funcionário
+        console.log('EMPLOYEE: Buscando MINHAS HORAS. Params:', config.params);
+      }
       
       const response = await axios.get<TimeEntriesResponse>(endpoint, config);
       
-      // Adicionar logs detalhados para depuração
-      console.log('Status da resposta:', response.status);
-      console.log('Headers da resposta:', JSON.stringify(response.headers));
-      console.log('Estrutura da resposta:', Object.keys(response.data));
-      
-      // Verificação detalhada da resposta
-      if (!response.data) {
-        console.log('Resposta sem dados');
-        setTimeEntries([]);
-        return;
+      if (currentUser.role === 'MANAGER' && activeTab === 'mine') {
+        console.log('MANAGER MINE - Raw API Response Status:', response.status);
+        console.log('MANAGER MINE - Raw API Response Headers:', JSON.stringify(response.headers, null, 2));
+        console.log('MANAGER MINE - Raw API Response Data:', JSON.stringify(response.data, null, 2));
+      } else if (currentUser.role === 'MANAGER' && activeTab === 'team') {
+        console.log('MANAGER TEAM - Raw API Response Status:', response.status);
+        console.log('MANAGER TEAM - Raw API Response Headers:', JSON.stringify(response.headers, null, 2));
+        console.log('MANAGER TEAM - Raw API Response Data:', JSON.stringify(response.data, null, 2));
       }
 
-      if (!response.data.timeEntries) {
-        console.log('Resposta sem timeEntries:', JSON.stringify(response.data));
-        setTimeEntries([]);
-        return;
-      }
+      let entries = response.data?.timeEntries || [];
+      console.log(`Recebidos ${entries.length} registros.`);
 
-      if (!Array.isArray(response.data.timeEntries)) {
-        console.log('timeEntries não é um array:', typeof response.data.timeEntries);
-        setTimeEntries([]);
-        return;
-      }
-      
-      if (response.data && response.data.timeEntries) {
-        console.log(`Recebidos ${response.data.timeEntries.length} registros de horas`);
-        if (response.data.timeEntries.length === 0) {
-          console.log('Nenhum registro encontrado.');
-        } else if (response.data.timeEntries.length === 1) {
-          console.log('Detalhes do registro:', JSON.stringify(response.data.timeEntries[0], null, 2));
-        } else {
-          console.log('Primeiros registros:', response.data.timeEntries.slice(0, 2).map(e => e.id));
-        }
-        setTimeEntries(response.data.timeEntries);
-      } else {
-        console.log('Resposta vazia ou mal formatada:', response.data);
-        setTimeEntries([]);
-      }
+      // Filtro frontend para manager na aba 'team' SE a API não excluir os dele com managedUsers=true
+      // Este é um fallback. O ideal é a API fazer isso.
+      // if (currentUser.role === 'MANAGER' && activeTab === 'team' && /* condição se a API não filtrou */) {
+      //  console.log('MANAGER: Filtrando entradas próprias da visualização da equipe no frontend.');
+      //  entries = entries.filter(entry => entry.userId !== currentUser.id);
+      // }
+
+      setTimeEntries(entries);
     } catch (error) {
       console.error('Erro ao buscar registros de horas:', error);
-      if (axios.isAxiosError(error)) {
-        console.log('Status:', error.response?.status);
-        console.log('Mensagem:', error.response?.data);
-        console.log('URL que falhou:', error.config?.url);
-        console.log('Headers enviados:', JSON.stringify(error.config?.headers));
-        
-        // Se for erro 401 (não autorizado), pode ser problema de token
-        if (error.response?.status === 401) {
-          Alert.alert('Sessão expirada', 'Sua sessão expirou. Por favor, faça login novamente.');
-          // Implementar redirecionamento para login se necessário
-        }
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        Alert.alert('Sessão expirada', 'Sua sessão expirou. Por favor, faça login novamente.');
+        // Aqui você pode adicionar navegação para a tela de login
+      } else {
+        // Para outros erros, mantém a lista vazia ou exibe uma mensagem genérica
+        setTimeEntries([]); 
       }
-      setTimeEntries([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -201,16 +192,37 @@ function TimeEntriesScreenComponent() {
 
   useEffect(() => {
     loadUserData();
-    fetchTimeEntries();
   }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchTimeEntries();
+    }
+  }, [activeTab, currentUser]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchTimeEntries();
   };
 
+  // Função para determinar se o usuário logado pode gerenciar (aprovar/rejeitar) uma entrada específica
+  const canManageEntry = (entry: TimeEntry): boolean => {
+    if (!currentUser) return false;
+
+    // ADMIN e DEVELOPER podem gerenciar qualquer registro, exceto os seus próprios.
+    if (currentUser.role === 'ADMIN' || currentUser.role === 'DEVELOPER') {
+      return entry.userId !== currentUser.id;
+    }
+
+    // MANAGER só pode gerenciar na aba "team" E se o registro não for dele.
+    if (currentUser.role === 'MANAGER') {
+      return activeTab === 'team' && entry.userId !== currentUser.id;
+    }
+
+    return false; // EMPLOYEE não gerencia aprovações.
+  };
+
   const getFilteredEntries = () => {
-    // Primeiro filtramos por status
     let filtered = timeEntries;
     
     switch (filter) {
@@ -225,7 +237,6 @@ function TimeEntriesScreenComponent() {
         break;
     }
     
-    // Se houver uma busca, filtramos pelo nome do usuário
     if (searchQuery.trim() !== '' && (userRole === 'ADMIN' || userRole === 'DEVELOPER' || userRole === 'MANAGER')) {
       const query = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(entry => 
@@ -239,12 +250,14 @@ function TimeEntriesScreenComponent() {
   };
 
   const getStatusColor = (entry: TimeEntry) => {
+    if (entry.isPaid) return '#28A745'; // Verde para pago
     if (entry.approved) return colors.tint;
     if (entry.rejected) return '#FF4D4F';
-    return '#FFA940'; // Pendente
+    return '#FFA940'; // Laranja para pendente
   };
 
   const getStatusText = (entry: TimeEntry) => {
+    if (entry.isPaid) return 'Pago';
     if (entry.approved) return 'Aprovado';
     if (entry.rejected) return 'Rejeitado';
     return 'Pendente';
@@ -273,13 +286,11 @@ function TimeEntriesScreenComponent() {
   };
 
   const handleCreateTimeEntry = async () => {
-    // Validação básica
     if (!date || !startTime || !endTime) {
       Alert.alert('Erro', 'Por favor, preencha todos os campos obrigatórios.');
       return;
     }
 
-    // Verificar se o horário final é maior que o inicial
     if (startTime >= endTime) {
       Alert.alert('Erro', 'O horário final deve ser maior que o horário inicial.');
       return;
@@ -287,10 +298,8 @@ function TimeEntriesScreenComponent() {
 
     setSubmitting(true);
 
-    // Formatar datas para envio
     const formattedDate = format(date, 'yyyy-MM-dd');
     
-    // Combinar a data com os horários
     const startDateTime = new Date(date);
     startDateTime.setHours(startTime.getHours(), startTime.getMinutes(), 0, 0);
     
@@ -335,7 +344,6 @@ function TimeEntriesScreenComponent() {
       
       if (axios.isAxiosError(error) && error.response) {
         if (error.response.status === 409) {
-          // Conflito de horário
           Alert.alert('Erro', 'Existe um conflito de horário com um registro existente.');
         } else {
           Alert.alert('Erro', error.response.data?.error || 'Erro ao criar registro de horas.');
@@ -382,14 +390,12 @@ function TimeEntriesScreenComponent() {
     }
   };
 
-  // Nova função para abrir o modal de aprovação
   const openApprovalModal = (entry: TimeEntry) => {
     setSelectedEntry(entry);
     setRejectionReason('');
     setApprovalModalVisible(true);
   };
 
-  // Função para aprovar registro de horas - corrigir endpoint
   const handleApproveTimeEntry = async () => {
     if (!selectedEntry) return;
     
@@ -404,7 +410,6 @@ function TimeEntriesScreenComponent() {
       
       console.log(`Aprovando entrada ${selectedEntry.id}`);
       
-      // Usando o endpoint correto com PUT para aprovar
       const response = await axios.put(
         `${API_URL}/mobile-time-entries/${selectedEntry.id}/approve`,
         { approved: true },
@@ -435,11 +440,9 @@ function TimeEntriesScreenComponent() {
     }
   };
 
-  // Função para rejeitar registro de horas - corrigir endpoint
   const handleRejectTimeEntry = async () => {
     if (!selectedEntry) return;
     
-    // Verificar se o motivo da rejeição foi preenchido
     if (!rejectionReason.trim()) {
       Alert.alert('Erro', 'O motivo da rejeição é obrigatório');
       return;
@@ -456,7 +459,6 @@ function TimeEntriesScreenComponent() {
       
       console.log(`Rejeitando entrada ${selectedEntry.id}`);
       
-      // Usando o endpoint correto com PUT para rejeitar
       const response = await axios.put(
         `${API_URL}/mobile-time-entries/${selectedEntry.id}/approve`,
         { 
@@ -494,30 +496,45 @@ function TimeEntriesScreenComponent() {
     <TouchableOpacity
       style={[
         styles.entryCard,
-        { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F8F9FA' },
-        // Adicionar borda especial para itens pendentes que podem ser gerenciados por admin/manager
-        (userRole === 'ADMIN' || userRole === 'DEVELOPER' || userRole === 'MANAGER') && 
-        item.approved === null && item.rejected === null ? 
-          { borderLeftWidth: 4, borderLeftColor: '#FFA940' } : {}
+        { 
+          backgroundColor: item.isPaid ? (colorScheme === 'dark' ? '#2a3b2a' : '#D4EDDA') : (colorScheme === 'dark' ? '#1E1E1E' : '#F8F9FA'),
+          borderColor: item.isPaid ? '#28A745' : (canManageEntry(item) && item.approved === null && item.rejected === null ? '#FFA940' : 'transparent'),
+          borderWidth: item.isPaid ? 1 : (canManageEntry(item) && item.approved === null && item.rejected === null ? 4 : 0),
+          borderLeftWidth: canManageEntry(item) && item.approved === null && item.rejected === null && !item.isPaid ? 4 : (item.isPaid ? 1 : 0),
+        },
+        // A borda especial para gerenciáveis só se aplica se não estiver pago
+        canManageEntry(item) && 
+        item.approved === null && item.rejected === null && !item.isPaid ? 
+          { borderLeftColor: '#FFA940' } : {}
       ]}
       onPress={() => {
-        // Apenas administradores, desenvolvedores e gerentes podem aprovar/rejeitar registros pendentes
-        if ((userRole === 'ADMIN' || userRole === 'DEVELOPER' || userRole === 'MANAGER') && 
-            item.approved === null && item.rejected === null) {
+        if (canManageEntry(item) && item.approved === null && item.rejected === null) {
           openApprovalModal(item);
+        } else {
+          // Futuramente, pode abrir um modal de visualização de detalhes apenas
+          console.log('Visualizando entrada (sem ação de gerenciamento disponível):', item.id);
         }
       }}
+      disabled={!(canManageEntry(item) && item.approved === null && item.rejected === null)} // Desabilita o card se não puder gerenciar
     >
       <View style={styles.entryHeader}>
         <Text style={[styles.entryDate, { color: colors.text }]}>
           {formatDate(item.date)}
         </Text>
         <View style={styles.statusContainer}>
+          {item.isPaid && (
+            <Ionicons
+              name="checkmark-done-circle-outline" // Ícone para pago
+              size={16}
+              color={getStatusColor(item)} // Usa a cor verde definida
+              style={styles.statusIcon}
+            />
+          )}
           <Ionicons
-            name={getStatusIcon(item) as any}
+            name={item.isPaid ? 'cash-outline' : getStatusIcon(item) as any} // Muda ícone se pago, senão usa o ícone de status normal
             size={16}
             color={getStatusColor(item)}
-            style={styles.statusIcon}
+            style={[styles.statusIcon, item.isPaid && { marginLeft: 4 }]} // Adiciona margem se ambos os ícones são mostrados
           />
           <Text style={[styles.statusText, { color: getStatusColor(item) }]}>
             {getStatusText(item)}
@@ -525,7 +542,6 @@ function TimeEntriesScreenComponent() {
         </View>
       </View>
       
-      {/* Mostrar nome do usuário se for admin/manager/developer */}
       {(userRole === 'ADMIN' || userRole === 'DEVELOPER' || userRole === 'MANAGER') && item.user && (
         <View style={styles.userInfoContainer}>
           <Text style={[styles.userNameText, { color: colors.text }]}>
@@ -567,26 +583,15 @@ function TimeEntriesScreenComponent() {
         </View>
       )}
       
-      {/* Botões de ação para aprovação/rejeição (apenas para admin/manager e registros pendentes) */}
       {(userRole === 'ADMIN' || userRole === 'DEVELOPER' || userRole === 'MANAGER') && 
        item.approved === null && item.rejected === null && (
         <View style={styles.actionButtonsContainer}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
-            <Ionicons 
-              name="checkmark-circle-outline" 
-              size={20} 
-              color="#52C41A" 
-              style={{ marginHorizontal: 4 }} 
-            />
-            <Ionicons 
-              name="close-circle-outline" 
-              size={20} 
-              color="#FF4D4F" 
-              style={{ marginHorizontal: 4 }} 
-            />
-          </View>
-          <Text style={[styles.actionHint, { color: colors.icon }]}>
-            Toque para aprovar ou rejeitar
+          {/* Os botões de Aprovar/Rejeitar são mostrados dentro do ApprovalModal, 
+              aqui apenas indicamos que a entrada é "analisável" pelo card e onPress. 
+              Se houvesse botões diretos no card, eles seriam condicionados por canManageEntry também.
+          */}
+          <Text style={{color: colors.text, fontStyle: 'italic'}}>
+            {canManageEntry(item) ? 'Toque para analisar' : 'Visualização'}
           </Text>
         </View>
       )}
@@ -665,9 +670,7 @@ function TimeEntriesScreenComponent() {
     </View>
   );
 
-  // Novo componente para a barra de pesquisa
   const renderSearchBar = () => {
-    // Mostra apenas para admin, developer e manager
     if (userRole !== 'ADMIN' && userRole !== 'DEVELOPER' && userRole !== 'MANAGER') {
       return null;
     }
@@ -751,7 +754,6 @@ function TimeEntriesScreenComponent() {
           </View>
           
           <ScrollView style={styles.modalContent}>
-            {/* Data */}
             <Text style={[styles.inputLabel, { color: colors.text }]}>Data *</Text>
             <TouchableOpacity
               style={[styles.dateButton, { backgroundColor: colorScheme === 'dark' ? '#2C2C2C' : '#F5F5F5' }]}
@@ -764,7 +766,6 @@ function TimeEntriesScreenComponent() {
             </TouchableOpacity>
             
             <View style={styles.timeInputRow}>
-              {/* Hora inicial */}
               <View style={styles.timeInputContainer}>
                 <Text style={[styles.inputLabel, { color: colors.text }]}>Início *</Text>
                 <TouchableOpacity
@@ -778,7 +779,6 @@ function TimeEntriesScreenComponent() {
                 </TouchableOpacity>
               </View>
               
-              {/* Hora final */}
               <View style={styles.timeInputContainer}>
                 <Text style={[styles.inputLabel, { color: colors.text }]}>Fim *</Text>
                 <TouchableOpacity
@@ -793,7 +793,6 @@ function TimeEntriesScreenComponent() {
               </View>
             </View>
             
-            {/* Projeto */}
             <Text style={[styles.inputLabel, { color: colors.text }]}>Projeto</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colorScheme === 'dark' ? '#2C2C2C' : '#F5F5F5', color: colors.text }]}
@@ -803,7 +802,6 @@ function TimeEntriesScreenComponent() {
               onChangeText={setProject}
             />
             
-            {/* Observação */}
             <Text style={[styles.inputLabel, { color: colors.text }]}>Observação</Text>
             <TextInput
               style={[styles.textarea, { backgroundColor: colorScheme === 'dark' ? '#2C2C2C' : '#F5F5F5', color: colors.text }]}
@@ -835,7 +833,6 @@ function TimeEntriesScreenComponent() {
     </Modal>
   );
 
-  // Novo modal para aprovação/rejeição
   const renderApprovalModal = () => {
     if (!selectedEntry) return null;
     
@@ -859,7 +856,6 @@ function TimeEntriesScreenComponent() {
             </View>
             
             <ScrollView style={styles.modalContent}>
-              {/* Detalhes do registro */}
               <View style={styles.entryDetailsContainer}>
                 <Text style={[styles.detailLabel, { color: colors.text }]}>Data:</Text>
                 <Text style={[styles.detailValue, { color: colors.text }]}>
@@ -908,7 +904,6 @@ function TimeEntriesScreenComponent() {
                 </View>
               )}
               
-              {/* Motivo de rejeição */}
               <Text style={[styles.inputLabel, { color: colors.text, marginTop: 20 }]}>
                 Motivo da rejeição (obrigatório para rejeitar)
               </Text>
@@ -979,8 +974,24 @@ function TimeEntriesScreenComponent() {
         </TouchableOpacity>
       </View>
       
+      {currentUser?.role === 'MANAGER' && (
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'team' && styles.activeTabButton, {backgroundColor: activeTab === 'team' ? colors.tint : colors.border }]}
+            onPress={() => setActiveTab('team')}
+          >
+            <Text style={[styles.tabButtonText, {color: activeTab === 'team' ? 'white' : colors.text}, activeTab === 'team' && styles.activeTabButtonText]}>Registros da Equipe</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'mine' && styles.activeTabButton, {backgroundColor: activeTab === 'mine' ? colors.tint : colors.border}]}
+            onPress={() => setActiveTab('mine')}
+          >
+            <Text style={[styles.tabButtonText, {color: activeTab === 'mine' ? 'white' : colors.text}, activeTab === 'mine' && styles.activeTabButtonText]}>Minhas Horas</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       {renderFilters()}
-      {renderSearchBar()}
+      {currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'DEVELOPER' || currentUser.role === 'MANAGER') && renderSearchBar()}
       {renderAddModal()}
       {renderApprovalModal()}
       
@@ -1338,5 +1349,31 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  tabButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    marginHorizontal: 5,
+  },
+  activeTabButton: {
+  },
+  tabButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activeTabButtonText: {
+    fontWeight: 'bold',
   },
 }); 

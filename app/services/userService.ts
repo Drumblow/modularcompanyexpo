@@ -26,7 +26,7 @@ export const fetchCompanyUsers = async (): Promise<SelectableUser[]> => {
   try {
     // Use apiRequest function instead of api.get
     const response = await apiRequest<FetchUsersResponse>({
-      endpoint: '/mobile-admin/users', // Corrected endpoint
+      endpoint: '/api/mobile-admin/users', // Corrected endpoint
       method: 'GET',
     });
     
@@ -100,7 +100,7 @@ export const createUser = async (userData: CreateUserData): Promise<CreateUserRe
   }
 
   try {
-    const endpoint = '/mobile-admin/users'; // Corrected endpoint for mobile user creation
+    const endpoint = '/api/mobile-admin/users'; // Corrected endpoint for mobile user creation
     console.log(`Attempting to create user at ${endpoint} with data:`, {
         ...userData,
         password: '[REDACTED]' // Don't log password
@@ -152,7 +152,7 @@ export const updateUser = async (userId: string, userData: UpdateUserData): Prom
   }
 
   try {
-    const endpoint = `/mobile-admin/users/${userId}`;
+    const endpoint = `/api/mobile-admin/users/${userId}`;
     console.log(`Attempting to update user ${userId} at ${endpoint} with data:`, userData);
 
     const response = await apiRequest<UpdateUserResponse>({

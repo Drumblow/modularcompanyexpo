@@ -207,7 +207,7 @@ export default function PaymentDetailsScreen() {
                </View>
             </View>
           )}
-
+          
           <View style={styles.infoRow}>
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Data</Text>
@@ -257,17 +257,17 @@ export default function PaymentDetailsScreen() {
         </View>
         
         {payment.timeEntries && payment.timeEntries.length > 0 && (
-          <View style={styles.entriesSection}>
-            <Text style={styles.entriesSectionTitle}>Registros Incluídos</Text>
-            
-            <FlatList
-              data={payment.timeEntries}
-              keyExtractor={(item) => item.id}
+        <View style={styles.entriesSection}>
+          <Text style={styles.entriesSectionTitle}>Registros Incluídos</Text>
+          
+          <FlatList
+            data={payment.timeEntries}
+            keyExtractor={(item) => item.id}
               renderItem={({ item }) => <TimeEntryItem item={item as PaymentTimeEntry} />}
-              scrollEnabled={false}
-              style={styles.entriesList}
-            />
-          </View>
+            scrollEnabled={false}
+            style={styles.entriesList}
+          />
+        </View>
         )}
       </ScrollView>
 

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'https://modularcompany.vercel.app';
+const API_BASE_URL = 'https://modularcompany.vercel.app/';
 
 export type ApiRequestOptions = {
   endpoint: string;
@@ -45,7 +45,8 @@ export const apiRequest = async <T>({
     }
     
     // Realiza a requisição
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+    const finalUrl = new URL(endpoint, API_BASE_URL).href;
+    const response = await fetch(finalUrl, options);
     
     // Verifica se a resposta é ok (status 2xx)
     if (!response.ok) {

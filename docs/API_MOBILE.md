@@ -67,7 +67,7 @@ O token expira após 24 horas, exigindo um novo login.
 
 **Headers:**
 ```
-Authorization: Bearer ...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Resposta de Sucesso (200):**
@@ -80,14 +80,7 @@ Authorization: Bearer ...
     "role": "EMPLOYEE",
     "companyId": "789012",
     "hourlyRate": 50,
-    "phone": "11999998888",
-    "address": "Rua Exemplo, 456",
-    "city": "Exemplópolis",
-    "state": "EX",
-    "zipCode": "12345-000",
-    "birthDate": "1990-08-20T00:00:00.000Z",
-    "createdAt": "2023-01-15T10:30:00.000Z",
-    "updatedAt": "2023-10-27T15:45:00.000Z",
+    "createdAt": "2023-01-15T10:30:00",
     "company": {
       "id": "789012",
       "name": "Empresa Exemplo",
@@ -111,8 +104,9 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Query Parameters (opcionais):**
-- `startDate`: Data inicial no formato ISO (YYYY-MM-DD)
-- `endDate`: Data final no formato ISO (YYYY-MM-DD)
+- `startDate`: Data inicial no formato ISO (YYYY-MM-DD). Ignorado se `period=all`.
+- `endDate`: Data final no formato ISO (YYYY-MM-DD). Ignorado se `period=all`.
+- `period`: Define o período dos registros. Use `all` para buscar todos os registros (ignora `startDate` e `endDate`). Se não fornecido, assume o mês atual.
 - `userId`: ID do usuário específico (apenas para ADMIN, MANAGER e DEVELOPER)
 - `approved`: Filtrar por status de aprovação (true/false)
 - `rejected`: Filtrar por status de rejeição (true/false)
@@ -120,12 +114,13 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 - `minHours`: Filtrar por horas mínimas
 - `maxHours`: Filtrar por horas máximas
 - `unpaid`: Filtrar apenas registros não pagos (true/false)
+- `includeOwnEntries`: Habilitar managers a verem seus próprios registros (true/false)
 - `page`: Número da página (padrão: 1)
 - `limit`: Registros por página (padrão: 50)
 - `sortBy`: Campo para ordenação (date, hours, createdAt)
 - `sortOrder`: Direção da ordenação (asc, desc)
 
-Se não especificado, retorna registros do mês atual.
+Se `startDate` e `endDate` não forem especificados e `period` não for `all`, retorna registros do mês atual.
 
 **Controle de Acesso por Papel:**
 
@@ -134,14 +129,17 @@ Se não especificado, retorna registros do mês atual.
   - Pode filtrar por userId específico
 
 - **ADMIN**: Acesso aos registros da sua empresa
-  - Pode ver registros de todos os usuários da mesma empresa
+  - Pode ver registros de todos os usuários da mesma empresa (incluindo outros ADMINs e MANAGERs da empresa)
   - Pode filtrar por userId específico (desde que o usuário pertença à mesma empresa)
   - Não pode ver registros de outras empresas
 
 - **MANAGER**: Acesso aos registros da sua equipe
-  - Pode ver registros de todos os usuários da mesma empresa
-  - Pode filtrar por userId específico (desde que o usuário pertença à mesma empresa)
-  - Não pode ver registros de outras empresas
+  - **NOVO**: Ao visualizar registros da "equipe" (ou seja, quando `userId` não é especificado ou quando `includeOwnEntries=true` sem um `userId` específico do manager), a lista de usuários considerados exclui aqueles com papéis `ADMIN` e `DEVELOPER`. Managers verão registros de `EMPLOYEE`s e outros `MANAGER`s (incluindo eles mesmos se `includeOwnEntries=true`) dentro de sua empresa.
+  - Pode filtrar por userId específico (desde que o usuário pertença à mesma empresa e não seja um ADMIN/DEVELOPER, a menos que seja o próprio manager).
+  - Não pode ver registros de outras empresas.
+  - Por padrão (sem `includeOwnEntries=true`), não vê seus próprios registros (apenas dos subordinados filtrados).
+  - Pode ver seus próprios registros usando o parâmetro `includeOwnEntries=true` (especialmente com `userId={seu-id}`).
+  - Pode ver apenas seus próprios registros usando `includeOwnEntries=true&userId={seu-id}`.
 
 - **EMPLOYEE**: Acesso restrito aos próprios registros
   - Pode ver apenas seus próprios registros
@@ -162,13 +160,15 @@ Se não especificado, retorna registros do mês atual.
       "approved": true,
       "rejected": null,
       "rejectionReason": null,
+      "isPaid": false,
       "userId": "123456",
       "user": {
         "id": "123456",
         "name": "Nome do Usuário",
         "email": "usuario@exemplo.com",
         "hourlyRate": 50,
-        "companyId": "789012"
+        "companyId": "789012",
+        "role": "EMPLOYEE" // NOVO: user.role agora é incluído
       },
       "createdAt": "2023-04-15T08:50:00",
       "updatedAt": "2023-04-15T17:10:00"
@@ -197,6 +197,7 @@ Se não especificado, retorna registros do mês atual.
     "minHours": null,
     "maxHours": null,
     "unpaid": null,
+    "period": null,
     "sortBy": "date",
     "sortOrder": "desc"
   }
@@ -210,25 +211,50 @@ Se não especificado, retorna registros do mês atual.
 GET /mobile-time-entries
 ```
 
-2. **ADMIN** - Visualizar registros de um funcionário específico:
+2. **ADMIN** - Visualizar todos os registros da empresa de todos os tempos:
+```
+GET /mobile-time-entries?period=all
+```
+
+3. **ADMIN** - Visualizar registros de um funcionário específico:
 ```
 GET /mobile-time-entries?userId=123456
 ```
 
-3. **ADMIN/MANAGER** - Visualizar apenas registros aprovados em um período específico:
+4. **ADMIN/MANAGER** - Visualizar apenas registros aprovados em um período específico:
 ```
 GET /mobile-time-entries?startDate=2023-05-01&endDate=2023-05-31&approved=true
 ```
 
-4. **EMPLOYEE** - Visualizar seus próprios registros pendentes:
+5. **MANAGER** - Visualizar seus próprios registros (Minhas Horas) de todos os tempos:
+```
+GET /mobile-time-entries?period=all&includeOwnEntries=true&userId={manager-id}
+```
+
+6. **MANAGER** - Visualizar registros da equipe incluindo os próprios, do mês atual:
+```
+GET /mobile-time-entries?includeOwnEntries=true
+```
+
+7. **EMPLOYEE** - Visualizar seus próprios registros pendentes do mês atual:
 ```
 GET /mobile-time-entries?approved=null&rejected=null
 ```
 
+8. **EMPLOYEE** - Visualizar todos os seus próprios registros de todos os tempos:
+```
+GET /mobile-time-entries?period=all
+```
+
 **Notas Importantes:**
-- Para ADMIN e MANAGER, se nenhum userId for especificado, serão retornados todos os registros de usuários da mesma empresa
-- Para EMPLOYEE, o parâmetro userId é ignorado, pois só podem ver seus próprios registros
-- O parâmetro unpaid=true filtra apenas registros que não foram associados a pagamentos
+- Para ADMIN e MANAGER, se nenhum `userId` for especificado, serão retornados todos os registros de usuários da mesma empresa (respeitando o filtro de `period` e, para MANAGER, o novo filtro de `role` para a equipe).
+- Para EMPLOYEE, o parâmetro `userId` é ignorado, pois só podem ver seus próprios registros.
+- O parâmetro `unpaid=true` filtra apenas registros que não foram associados a pagamentos.
+- O parâmetro `includeOwnEntries=true` permite que managers vejam seus próprios registros, útil para a aba "Minhas Horas".
+- **NOVO**: O parâmetro `period=all` busca todos os registros, ignorando `startDate`, `endDate` e o filtro padrão de mês atual.
+- **NOVO**: Cada registro de hora agora inclui o campo `isPaid` (booleano).
+- **NOVO**: O objeto `user` dentro de cada `timeEntry` agora inclui o campo `role`.
+- **NOVO**: A visão de "equipe" para `MANAGER`s agora exclui automaticamente usuários `ADMIN` e `DEVELOPER` (a menos que seja o registro do próprio manager com `includeOwnEntries=true`).
 
 #### Criar Registro
 
@@ -408,6 +434,11 @@ Authorization: Bearer ... (Token de Admin ou Manager)
 
 **Descrição:** Permite que um **Administrador** ou **Gerente** aprove ou rejeite um registro de horas específico de um funcionário da sua empresa.
 
+**Restrições:**
+- **NOVO**: Managers não podem aprovar seus próprios registros de horas
+- Apenas administradores podem aprovar horas registradas por managers
+- Apenas usuários com permissões Admin ou Manager podem usar este endpoint
+
 **Body (para aprovar):**
 ```json
 {
@@ -437,7 +468,7 @@ Authorization: Bearer ... (Token de Admin ou Manager)
 **Respostas de Erro:**
 - **400 Bad Request:** Dados inválidos (ex: `approved` não é booleano, `rejectionReason` faltando ao rejeitar).
 - **401 Unauthorized:** Token inválido ou expirado.
-- **403 Forbidden:** Usuário não tem permissão (não é Admin/Manager) ou o registro não pertence à sua empresa.
+- **403 Forbidden:** Usuário não tem permissão (não é Admin/Manager), o registro não pertence à sua empresa, ou **o manager está tentando aprovar seu próprio registro**.
 - **404 Not Found:** Registro de horas com o ID fornecido não encontrado.
 - **500 Internal Server Error:** Erro inesperado no servidor.
 
@@ -882,22 +913,14 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 **Headers:**
 ```
-Authorization: Bearer ...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-**Descrição:** Permite que o usuário autenticado atualize seus próprios dados de perfil. Apenas os campos fornecidos no corpo serão atualizados.
-
-**Body (campos opcionais):**
+**Body:**
 ```json
 {
-  "name": "Novo Nome Atualizado",
-  "email": "novo.email.atualizado@exemplo.com",
-  "phone": "11988887777",
-  "address": "Avenida Principal, 789, Ap 101",
-  "city": "Nova Cidade",
-  "state": "NC",
-  "zipCode": "54321-123",
-  "birthDate": "1992-05-10T00:00:00.000Z" // Ou null para remover
+  "name": "Novo Nome",
+  "email": "novo.email@exemplo.com"
 }
 ```
 
@@ -906,19 +929,12 @@ Authorization: Bearer ...
 {
   "user": {
     "id": "123456",
-    "name": "Novo Nome Atualizado",
-    "email": "novo.email.atualizado@exemplo.com",
+    "name": "Novo Nome",
+    "email": "novo.email@exemplo.com",
     "role": "EMPLOYEE",
     "companyId": "789012",
     "hourlyRate": 50,
-    "phone": "11988887777",
-    "address": "Avenida Principal, 789, Ap 101",
-    "city": "Nova Cidade",
-    "state": "NC",
-    "zipCode": "54321-123",
-    "birthDate": "1992-05-10T00:00:00.000Z",
-    "createdAt": "2023-01-15T10:30:00.000Z",
-    "updatedAt": "2023-10-27T16:00:00.000Z", // Hora da atualização
+    "createdAt": "2023-01-15T10:30:00",
     "company": {
       "id": "789012",
       "name": "Empresa Exemplo",
@@ -1457,7 +1473,7 @@ Authorization: Bearer ... (Token de Admin ou Manager)
 - **400 Bad Request:** Usuário autenticado não está associado a uma empresa.
 - **500 Internal Server Error:** Erro inesperado no servidor.
 
-#### Criar Usuário na Empresa (Admin/Manager)
+#### Criar Novo Usuário (Admin/Manager)
 
 **Endpoint:** `/mobile-admin/users`
 
@@ -1468,56 +1484,60 @@ Authorization: Bearer ... (Token de Admin ou Manager)
 Authorization: Bearer ... (Token de Admin ou Manager)
 ```
 
-**Descrição:** Permite que um **Administrador** ou **Gerente** crie um novo usuário (funcionário ou outro gerente) associado à sua empresa.
+**Descrição:** Permite que um **Administrador** ou **Gerente** crie um novo usuário (Funcionário ou outro Gerente) em sua empresa.
 
 **Body:**
 ```json
 {
-  "name": "Novo Funcionario Completo",
-  "email": "novo.completo@empresa.com",
-  "password": "senhaInicial123",
-  "role": "EMPLOYEE",
-  "hourlyRate": 35.00,
-  phone: "48912345678",
-  address: "Rua dos Testes, 1000",
-  city: "Testelândia",
-  state: "TS",
-  zipCode: "98765-432",
-  birthDate: "1988-01-25T00:00:00.000Z"
+  "name": "Nome do Novo Usuário",
+  "email": "novousuario@empresa.com",
+  "password": "senhaSegura123",
+  "role": "EMPLOYEE", // ou "MANAGER"
+  "hourlyRate": 55.0, // Opcional, aplicável se role="EMPLOYEE"
+  "phone": "(11) 98765-4321", // Opcional
+  "address": "Rua das Palmeiras, 123", // Opcional
+  "city": "Cidade Exemplo", // Opcional
+  "state": "SP", // Opcional
+  "zipCode": "12345-678", // Opcional
+  "birthDate": "1990-07-15T00:00:00Z", // Opcional, formato ISO 8601
+  "managerId": "uuid-do-gerente-responsavel" // Opcional, aplicável se role="EMPLOYEE" e houver um gerente
 }
 ```
 
-**Resposta de Sucesso (201 Created):**
+**Resposta de Sucesso (201):**
 ```json
 {
   "user": {
-    "id": "uuid-novo-usuario-completo",
-    "name": "Novo Funcionario Completo",
-    "email": "novo.completo@empresa.com",
+    "id": "uuid-novo-usuario",
+    "name": "Nome do Novo Usuário",
+    "email": "novousuario@empresa.com",
     "role": "EMPLOYEE",
     "companyId": "uuid-da-empresa-do-admin",
-    "hourlyRate": 35.00,
-    "phone": "48912345678",
-    "address": "Rua dos Testes, 1000",
-    "city": "Testelândia",
-    "state": "TS",
-    "zipCode": "98765-432",
-    "birthDate": "1988-01-25T00:00:00.000Z",
-    "createdAt": "2023-10-27T16:15:00.000Z"
+    "hourlyRate": 55.0,
+    "phone": "(11) 98765-4321",
+    "address": "Rua das Palmeiras, 123",
+    "city": "Cidade Exemplo",
+    "state": "SP",
+    "zipCode": "12345-678",
+    "birthDate": "1990-07-15T00:00:00.000Z",
+    "managerId": "uuid-do-gerente-responsavel",
+    "createdAt": "2023-10-27T10:00:00.000Z"
   }
 }
 ```
 
 **Respostas de Erro:**
-- **400 Bad Request:** Dados inválidos no corpo da requisição (ex: email inválido, senha curta, `role` inválido, `hourlyRate` não numérico). Verificar `details` na resposta.
+- **400 Bad Request:** Dados inválidos (ver `details` na resposta).
 - **401 Unauthorized:** Token inválido ou expirado.
-- **403 Forbidden:** Usuário autenticado não é Admin ou Manager.
-- **409 Conflict:** O email fornecido já está cadastrado no sistema.
-- **500 Internal Server Error:** Erro inesperado no servidor.
+- **403 Forbidden:** Usuário autenticado não é Admin/Manager.
+- **409 Conflict:** Email já está em uso.
+- **500 Internal Server Error:** Erro inesperado.
 
-#### Listar Pagamentos da Empresa
+---
 
-**Endpoint:** `/mobile-admin/payments`
+#### Visualizar Usuário Específico (Admin/Manager)
+
+**Endpoint:** `/mobile-admin/users/[userId]`
 
 **Método:** `GET`
 
@@ -1526,67 +1546,130 @@ Authorization: Bearer ... (Token de Admin ou Manager)
 Authorization: Bearer ... (Token de Admin ou Manager)
 ```
 
-**Descrição:** Retorna uma lista paginada de pagamentos **criados para os usuários** da empresa do Admin/Manager autenticado. Este endpoint é ideal para exibir as abas "Pendentes" e "Concluídos" no aplicativo.
-
-**Query Parameters (opcionais):**
-- `status`: Filtrar por status. Pode ser um único status (`pending`, `completed`, etc.) ou múltiplos status separados por vírgula (`pending,awaiting_confirmation`).
-- `userId`: Filtrar pagamentos destinados a um funcionário específico.
-- `startDate`: Filtrar pagamentos a partir desta data (formato YYYY-MM-DD).
-- `endDate`: Filtrar pagamentos até esta data (formato YYYY-MM-DD).
-- `page`: Número da página para paginação (padrão: 1).
-- `limit`: Pagamentos por página (padrão: 50).
-- `sortBy`: Campo para ordenação (`date`, `amount`, `status`, padrão: `date`).
-- `sortOrder`: Direção da ordenação (`asc`, `desc`, padrão: `desc`).
+**Descrição:** Retorna detalhes de um usuário específico pertencente à empresa do Admin/Manager.
 
 **Resposta de Sucesso (200):**
 ```json
 {
-  "payments": [
-    {
-      "id": "uuid-pagamento-1",
-      "amount": 123.45,
-      "date": "2025-04-30",
-      "description": "Pagamento criado via teste",
-      "reference": "Teste Pagamento Mobile 1746035545288",
-      "paymentMethod": "pix",
-      "status": "completed",
-      "confirmedAt": "2025-04-30T13:52:28",
-      "periodStart": "2025-04-29",
-      "periodEnd": "2025-04-30",
-      "user": {
-        "id": "uuid-funcionario",
-        "name": "Funcionário Mobile Teste",
-        "email": "funcionario_mobile_test@teste.com"
-      },
-      "creator": {
-        "id": "uuid-admin",
-        "name": "Admin Mobile Teste"
-      }
-    }
-    // ... outros pagamentos
-  ],
-  "pagination": {
-    "total": 5,
-    "page": 1,
-    "limit": 50,
-    "pages": 1
-  },
-  "appliedFilters": {
-    "status": "completed",
-    "userId": null,
-    "startDate": null,
-    "endDate": null,
-    "sortBy": "date",
-    "sortOrder": "desc"
+  "user": {
+    "id": "uuid-do-usuario-alvo",
+    "name": "Nome do Usuário Alvo",
+    "email": "usuarioalvo@empresa.com",
+    "role": "EMPLOYEE",
+    "companyId": "uuid-da-empresa-do-admin",
+    "hourlyRate": 50.0,
+    "phone": "(11) 12345-6789",
+    "address": "Rua Exemplo, 456",
+    "city": "Outra Cidade",
+    "state": "RJ",
+    "zipCode": "23456-789",
+    "birthDate": "1985-03-20T00:00:00.000Z",
+    "managerId": null,
+    // "active": true, // Adicionar se o campo 'active' for implementado e selecionado na API
+    "createdAt": "2023-01-10T09:00:00.000Z",
+    "updatedAt": "2023-05-15T14:30:00.000Z"
   }
 }
 ```
 
 **Respostas de Erro:**
-- **400 Bad Request:** Parâmetros inválidos (ex: formato de data incorreto).
 - **401 Unauthorized:** Token inválido ou expirado.
-- **403 Forbidden:** Usuário não tem permissão (não é Admin/Manager).
-- **500 Internal Server Error:** Erro inesperado no servidor.
+- **403 Forbidden:** Usuário autenticado não é Admin/Manager.
+- **404 Not Found:** Usuário com o `userId` fornecido não encontrado ou não pertence à empresa.
+- **500 Internal Server Error:** Erro inesperado.
+
+---
+
+#### Atualizar Usuário (Admin/Manager)
+
+**Endpoint:** `/mobile-admin/users/[userId]`
+
+**Método:** `PUT`
+
+**Headers:**
+```
+Authorization: Bearer ... (Token de Admin ou Manager)
+```
+
+**Descrição:** Permite que um **Administrador** ou **Gerente** atualize os dados de um usuário em sua empresa. Email e senha não são atualizáveis por esta rota.
+
+**Body (apenas campos a serem atualizados):**
+```json
+{
+  "name": "Nome Atualizado do Usuário",
+  "role": "MANAGER", 
+  "hourlyRate": null, 
+  "phone": "(11) 99999-8888",
+  "address": "Nova Rua, 789",
+  "city": "Cidade Atualizada",
+  "state": "MG",
+  "zipCode": "34567-890",
+  "birthDate": "1992-11-25T00:00:00Z",
+  "managerId": null, // Ex: se tornou MANAGER
+  "active": true // Ex: para reativar um usuário (requer campo 'active' no schema e na API)
+}
+```
+
+**Resposta de Sucesso (200):**
+```json
+{
+  "user": {
+    "id": "uuid-do-usuario-alvo",
+    "name": "Nome Atualizado do Usuário",
+    "email": "usuarioalvo@empresa.com", 
+    "role": "MANAGER",
+    "hourlyRate": null,
+    "phone": "(11) 99999-8888",
+    "address": "Nova Rua, 789",
+    "city": "Cidade Atualizada",
+    "state": "MG",
+    "zipCode": "34567-890",
+    "birthDate": "1992-11-25T00:00:00.000Z",
+    "managerId": null
+    // "active": true 
+  }
+}
+```
+
+**Respostas de Erro:**
+- **400 Bad Request:** Dados inválidos.
+- **401 Unauthorized:** Token inválido ou expirado.
+- **403 Forbidden:** Usuário autenticado não é Admin/Manager.
+- **404 Not Found:** Usuário com o `userId` fornecido não encontrado ou não pertence à empresa.
+- **500 Internal Server Error:** Erro inesperado.
+
+---
+
+#### Excluir/Desativar Usuário (Admin/Manager)
+
+**Endpoint:** `/mobile-admin/users/[userId]`
+
+**Método:** `DELETE`
+
+**Headers:**
+```
+Authorization: Bearer ... (Token de Admin ou Manager)
+```
+
+**Descrição:** Permite que um **Administrador** ou **Gerente** exclua (ou desative, dependendo da implementação na API) um usuário de sua empresa. Um usuário não pode se auto-excluir/desativar por esta rota.
+
+**Resposta de Sucesso (200):**
+```json
+{
+  "message": "Usuário excluído com sucesso." 
+}
+// Ou, se implementada desativação na API:
+// {
+//   "user": { "id": "uuid-usuario-desativado", "active": false, ... },
+//   "message": "Usuário desativado com sucesso."
+// }
+```
+
+**Respostas de Erro:**
+- **401 Unauthorized:** Token inválido ou expirado.
+- **403 Forbidden:** Usuário autenticado não é Admin/Manager, ou tentativa de auto-exclusão.
+- **404 Not Found:** Usuário com o `userId` fornecido não encontrado ou não pertence à empresa.
+- **500 Internal Server Error:** Erro inesperado.
 
 ## Implementação no React Native
 

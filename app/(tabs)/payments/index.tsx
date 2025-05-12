@@ -53,7 +53,7 @@ export default function PaymentsScreen() {
   const router = useRouter();
   const [userRole, setUserRole] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<PaymentTab>('received'); // Default tab
-  
+
   // State for the "Create Payment" modal (remains the same)
   const [createModalVisible, setCreateModalVisible] = useState(false);
   // ... (all states related to the create modal remain the same) ...
@@ -85,7 +85,7 @@ export default function PaymentsScreen() {
   const [loadingReceived, setLoadingReceived] = useState(true);
   const [loadingPending, setLoadingPending] = useState(false);
   const [loadingCompleted, setLoadingCompleted] = useState(false);
-  
+      
   // Error states per tab
   const [errorReceived, setErrorReceived] = useState<string | null>(null);
   const [errorPending, setErrorPending] = useState<string | null>(null);
@@ -122,7 +122,7 @@ export default function PaymentsScreen() {
       case 'pending': setLoadingPending(true); setErrorPending(null); break;
       case 'completed': setLoadingCompleted(true); setErrorCompleted(null); break;
     }
-    setRefreshing(false);
+      setRefreshing(false);
 
     try {
       let response: PaymentsResponse | null = null;
@@ -230,13 +230,13 @@ export default function PaymentsScreen() {
   // derivedPaymentData, toggleTimeEntrySelection, resetForm, openModal, closeModal,
   // submitPayment, showAndroidDatePicker, handleDateChange, renderDateTimePicker 
   // ... (These functions are unchanged) ...
-   const handlePaymentPress = (paymentId: string) => {
+  const handlePaymentPress = (paymentId: string) => {
     router.push({
       pathname: "/payment-details",
       params: { id: paymentId }
     });
   };
-    const loadUsersForModal = async () => {
+  const loadUsersForModal = async () => {
     if (!canCreatePayment) return; // Should not happen if button isn't visible, but safeguard
     try {
       setCompanyUsers([]); // Clear previous list
@@ -248,7 +248,7 @@ export default function PaymentsScreen() {
        setCompanyUsers([]); // Ensure it's empty on error
     }
   };
-    useEffect(() => {
+  useEffect(() => {
     const loadUnpaidEntries = async () => {
       if (selectedUserId) {
         setFetchingEntries(true);
@@ -264,7 +264,7 @@ export default function PaymentsScreen() {
         } finally {
           setFetchingEntries(false);
         }
-      } else {
+          } else {
         setUnpaidTimeEntries([]); // Clear if no user selected
         setSelectedTimeEntryIds([]);
       }
@@ -307,7 +307,7 @@ export default function PaymentsScreen() {
         const endDateStr = format(maxDate, 'dd/MM/yyyy', { locale: ptBR });
         if (startDateStr === endDateStr) {
             defaultDescription = `Pagamento ref. ${totalHours.toFixed(2)}h em ${startDateStr}`;
-        } else {
+      } else {
             defaultDescription = `Pagamento ref. ${totalHours.toFixed(2)}h (Período: ${startDateStr} a ${endDateStr})`;
         }
     }
@@ -345,7 +345,7 @@ export default function PaymentsScreen() {
       }
     });
   };
-    const resetForm = useCallback(() => {
+  const resetForm = useCallback(() => {
     setSelectedUserId('');
     setCompanyUsers([]);
     setUnpaidTimeEntries([]);
@@ -361,12 +361,12 @@ export default function PaymentsScreen() {
     setFetchingEntries(false);
     setShowDatePicker(false);
   }, []);
-    const openModal = () => {
+  const openModal = () => {
     resetForm();
     loadUsersForModal();
     setCreateModalVisible(true);
   };
-    const closeModal = () => {
+  const closeModal = () => {
     setCreateModalVisible(false);
     setTimeout(resetForm, 300); 
   };
@@ -374,7 +374,7 @@ export default function PaymentsScreen() {
      setFormError(null);
      setSubmitting(true);
      setSuccess(false);
-     
+  
      const finalAmount = derivedPaymentData.calculatedAmount;
 
      try {
@@ -420,24 +420,24 @@ export default function PaymentsScreen() {
       console.log('Enviando dados para criar pagamento:', paymentData);
 
       const response = await createPayment(paymentData);
-
+      
       console.log('Resposta da criação de pagamento:', response);
 
       if (response.payment && response.payment.id) {
         setSuccess(true);
         Alert.alert('Sucesso', 'Pagamento criado com sucesso!');
-        setTimeout(() => {
-            closeModal();
+      setTimeout(() => {
+        closeModal(); 
             loadTabData('pending', selectedFilterUserId); // Reload the pending tab data after creation
-        }, 1500);
+      }, 1500);
       } else {
          throw new Error('Falha ao criar pagamento. Resposta inesperada da API.');
       }
-
+      
     } catch (error: any) {
       console.error('Erro ao submeter pagamento:', error);
       setFormError(error.message || 'Ocorreu um erro ao criar o pagamento. Tente novamente.');
-      setSuccess(false);
+      setSuccess(false); 
     } finally {
       setSubmitting(false);
     }
@@ -446,7 +446,7 @@ export default function PaymentsScreen() {
     setCurrentPickerField(field);
     setShowDatePicker(true);
   };
-    const handleDateChange = (event: any, selectedDate?: Date) => {
+  const handleDateChange = (event: any, selectedDate?: Date) => {
     const currentDate = selectedDate || paymentDate;
     // For Android, hide picker immediately. For iOS, keep open until user confirms.
     setShowDatePicker(Platform.OS === 'ios'); 
@@ -456,7 +456,7 @@ export default function PaymentsScreen() {
     // Reset picker field only for Android after selection or cancel
     if (Platform.OS === 'android') {
        setShowDatePicker(false); 
-       setCurrentPickerField(null);
+       setCurrentPickerField(null); 
     }
   };
      const renderDateTimePicker = () => {
@@ -468,21 +468,21 @@ export default function PaymentsScreen() {
     let onChange;
 
     switch (currentPickerField) {
-      case 'date':
-        value = paymentDate;
-        onChange = handleDateChange;
-        break;
+        case 'date':
+           value = paymentDate;
+           onChange = handleDateChange;
+           break;
       // Remove cases for 'startDate' and 'endDate'
-      default:
+        default:
         return null;
-    }
-
-    return (
-      <DateTimePicker
-        value={value}
+      }
+      
+         return (
+           <DateTimePicker
+             value={value}
         mode="date"
         display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-        onChange={onChange}
+             onChange={onChange}
         locale="pt-BR"
       />
     );
@@ -505,7 +505,7 @@ export default function PaymentsScreen() {
   // Render Header conditionally based on tab
   const renderListHeader = () => {
     if (activeTab === 'received' && balanceData) {
-      return (
+    return (
         <View style={styles.headerContainer}>
           <BalanceCard balanceData={balanceData} />
           {currentPayments.length > 0 && <Text style={styles.sectionTitle}>Histórico</Text>}
@@ -526,14 +526,14 @@ export default function PaymentsScreen() {
       <View style={styles.emptyContainer}>
         <Ionicons name="cash-outline" size={60} color="#94a3b8" />
         <Text style={styles.emptyText}>{message}</Text>
-      </View>
+        </View>
     );
   };
 
   // Render the Employee Filter Picker (only for Admin/Manager on Pending tab)
   const renderEmployeeFilter = () => {
     if (!isAdminOrManager || activeTab !== 'pending') return null;
-
+    
     return (
       <View style={styles.filterContainer}>
         <Text style={styles.filterLabel}>Filtrar por Funcionário:</Text>
@@ -576,7 +576,7 @@ export default function PaymentsScreen() {
           >
             <Text style={[styles.tabLabel, activeTab === tab.key && styles.tabLabelActive]}>
               {tab.label}
-            </Text>
+        </Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -586,7 +586,7 @@ export default function PaymentsScreen() {
   // Modal rendering (remains the same)
   const renderCreatePaymentModal = () => (
       // ... modal JSX unchanged ...
-       <Modal
+    <Modal
       animationType="slide"
       transparent={true}
       visible={createModalVisible}
@@ -611,18 +611,18 @@ export default function PaymentsScreen() {
             {/* User Selection */}
             <Text style={styles.label}>Funcionário:</Text>
             <View style={styles.pickerContainer}>
-             <NativePicker
-                selectedValue={selectedUserId}
+                 <NativePicker
+                   selectedValue={selectedUserId}
                 onValueChange={(itemValue) => setSelectedUserId(itemValue || '')}
                 style={styles.picker}
-                enabled={!submitting && companyUsers.length > 0} 
-              >
+                   enabled={!submitting && companyUsers.length > 0}
+                 >
                 <NativePicker.Item label="-- Selecione um Funcionário --" value="" />
-                {companyUsers.map((user) => (
-                  <NativePicker.Item key={user.id} label={`${user.name} (${user.email})`} value={user.id} />
-                ))}
-              </NativePicker>
-            </View>
+                   {companyUsers.map((user) => (
+                     <NativePicker.Item key={user.id} label={`${user.name} (${user.email})`} value={user.id} />
+                   ))}
+                 </NativePicker>
+              </View>
             {!companyUsers.length && !selectedUserId && <ActivityIndicator style={{ marginVertical: 10 }}/>} 
 
             {/* Unpaid Time Entries Section */}
@@ -636,12 +636,12 @@ export default function PaymentsScreen() {
                 {!fetchingEntries && unpaidTimeEntries.length > 0 && (
                   <View style={styles.entriesList}>
                     {unpaidTimeEntries.map((entry) => (
-                      <TouchableOpacity 
+                 <TouchableOpacity 
                          key={entry.id} 
                          style={styles.entryItem} 
                          onPress={() => toggleTimeEntrySelection(entry.id)}
-                         disabled={submitting}
-                      >
+                    disabled={submitting}
+                 >
                          <Checkbox
                             value={selectedTimeEntryIds.includes(entry.id)}
                             onValueChange={() => toggleTimeEntrySelection(entry.id)}
@@ -652,7 +652,7 @@ export default function PaymentsScreen() {
                         <View style={styles.entryDetails}>
                            <Text style={styles.entryDate}>
                               {format(new Date(entry.date), 'dd/MM/yyyy', { locale: ptBR })} - {entry.totalHours.toFixed(2)}h
-                           </Text>
+                  </Text>
                            <Text style={styles.entryProject}>{entry.project || 'Sem projeto'}</Text>
                            {/* TODO: Display calculated value per entry if hourly rate is known */}
                            {/* <Text style={styles.entryValue}>Valor: R$ XXX.XX</Text> */}
@@ -660,12 +660,12 @@ export default function PaymentsScreen() {
                               {entry.observation || 'Sem observação'}
                            </Text>
                         </View>
-                      </TouchableOpacity>
+                </TouchableOpacity>
                     ))}
-                  </View>
-                )}
               </View>
-            )}
+                )}
+                 </View>
+              )}
 
             {/* Payment Details Section (conditional on entries selected) */}
             {selectedTimeEntryIds.length > 0 && (
@@ -679,14 +679,14 @@ export default function PaymentsScreen() {
                         {derivedPaymentData.periodStart && derivedPaymentData.periodEnd 
                          ? `${format(new Date(derivedPaymentData.periodStart), 'dd/MM/yyyy', { locale: ptBR })} a ${format(new Date(derivedPaymentData.periodEnd), 'dd/MM/yyyy', { locale: ptBR })}`
                          : '--'}
-                    </Text>
-                 </View>
+                     </Text>
+                  </View>
                  
                  {/* Display Calculated Amount (now read-only) */}
                  <Text style={styles.label}>Valor (CAD $):</Text>
-                 <TextInput
+              <TextInput
                     style={[styles.input, styles.readOnlyInput]}
-                    value={amount}
+                value={amount}
                     editable={false}
                     placeholder="Calculado automaticamente"
                  />
@@ -699,26 +699,26 @@ export default function PaymentsScreen() {
                  <TouchableOpacity onPress={() => showAndroidDatePicker('date')} style={styles.dateInput} disabled={submitting}>
                     <Text>{format(paymentDate, 'dd/MM/yyyy', { locale: ptBR })}</Text>
                     <Ionicons name="calendar" size={20} color="#666" />
-                 </TouchableOpacity>
+              </TouchableOpacity>
 
                  <Text style={styles.label}>Descrição:</Text>
-                 <TextInput
+              <TextInput
                     style={[styles.input, styles.textArea]}
                     placeholder="Preenchido automaticamente (editável)"
-                    value={description}
-                    onChangeText={setDescription}
+                value={description}
+                onChangeText={setDescription}
                     multiline
                     editable={!submitting}
-                 />
-
+              />
+              
                  <Text style={styles.label}>Referência (Opcional):</Text>
-                 <TextInput
+              <TextInput
                     style={styles.input}
                     placeholder="Ex: PGTO-MAI-2024"
-                    value={reference}
-                    onChangeText={setReference}
+                value={reference}
+                onChangeText={setReference}
                     editable={!submitting}
-                 />
+              />
 
                  <Text style={styles.label}>Método de Pagamento:</Text>
                   <View style={styles.pickerContainer}>
@@ -738,21 +738,21 @@ export default function PaymentsScreen() {
             )}
 
             {/* Submit Button - Disable if amount is not positive or rate is unknown */}
-            <TouchableOpacity 
+              <TouchableOpacity
                style={[styles.submitButton, (submitting || selectedTimeEntryIds.length === 0 || !(derivedPaymentData.calculatedAmount > 0)) && styles.disabledButton]} 
                onPress={submitPayment}
                disabled={submitting || selectedTimeEntryIds.length === 0 || !(derivedPaymentData.calculatedAmount > 0)}
-            >
+              >
               {submitting ? (
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text style={styles.submitButtonText}>Criar Pagamento</Text>
               )}
-            </TouchableOpacity>
+              </TouchableOpacity>
           </ScrollView>
            {/* Render DateTimePicker outside ScrollView for better handling on iOS */}
           {renderDateTimePicker()}
-        </View>
+            </View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -799,23 +799,23 @@ export default function PaymentsScreen() {
 
         {/* Payment List for the active tab */}
         {!currentLoading && !currentError && (
-          <FlatList
+        <FlatList
             data={currentPayments} // Use data from the active tab
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
               <PaymentCard payment={item} onPress={() => handlePaymentPress(item.id)} />
-            )}
+          )}
             ListHeaderComponent={renderListHeader} // Render header conditionally
             ListEmptyComponent={renderEmptyComponent} // Render empty state based on tab
             contentContainerStyle={currentPayments.length === 0 ? styles.emptyList : styles.list}
-            refreshControl={
+          refreshControl={
               <RefreshControl 
                  refreshing={refreshing} 
                  onRefresh={onRefresh} 
                  colors={['#0284c7']} 
               />
-            }
-          />
+          }
+        />
         )}
         
         {/* Render the create payment modal (unchanged) */}
@@ -976,7 +976,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#f9f9f9',
   },
-  textArea: {
+   textArea: {
     minHeight: 80,
     textAlignVertical: 'top',
   },
@@ -988,7 +988,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   picker: {
-     height: 50,
+    height: 50, 
      width: '100%',
   },
   dateInput: {
@@ -1034,9 +1034,9 @@ const styles = StyleSheet.create({
      maxHeight: 200,
    },
   entryItem: {
-     flexDirection: 'row',
-     alignItems: 'center',
-     paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
      borderBottomWidth: 1,
      borderBottomColor: '#f0f0f0',
   },
@@ -1045,9 +1045,9 @@ const styles = StyleSheet.create({
   },
    entryDetails: {
      flex: 1,
-   },
+  },
   entryDate: {
-     fontSize: 14,
+    fontSize: 14,
      fontWeight: '500',
   },
   entryProject: {
@@ -1075,7 +1075,7 @@ const styles = StyleSheet.create({
   },
    derivedInfo: {
      flexDirection: 'row',
-     alignItems: 'center',
+    alignItems: 'center',
      backgroundColor: '#e9e9e9',
      paddingVertical: 8,
      paddingHorizontal: 12,
@@ -1144,7 +1144,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   filterContainer: {
-    flexDirection: 'row',
+     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,

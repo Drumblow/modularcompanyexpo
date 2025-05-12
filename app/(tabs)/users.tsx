@@ -88,7 +88,7 @@ export default function UsersScreen() {
         console.error('Erro ao carregar dados iniciais:', error);
         setUserRole(null);
         setLoading(false);
-      } 
+      }
       // setLoading(false) moved inside conditions or to finally if needed
     };
 
@@ -352,37 +352,37 @@ export default function UsersScreen() {
     <View
       key={item.id}
       style={[
-        styles.userCard,
+        styles.userCard, 
         { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F8F9FA' }
       ]}
     >
       <View style={styles.userCardContent}>
-        <View style={styles.userInfo}>
-          <View style={[styles.userAvatar, { backgroundColor: colorScheme === 'dark' ? '#2C2C2C' : '#E9F5FF' }]}>
-            <Text style={[styles.userInitials, { color: colors.tint }]}>
+      <View style={styles.userInfo}>
+        <View style={[styles.userAvatar, { backgroundColor: colorScheme === 'dark' ? '#2C2C2C' : '#E9F5FF' }]}>
+          <Text style={[styles.userInitials, { color: colors.tint }]}>
               {item.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2)}
-            </Text>
-          </View>
-          <View style={styles.userDetails}>
-            <Text style={[styles.userName, { color: colors.text }]}>{item.name}</Text>
-            <Text style={[styles.userEmail, { color: colors.icon }]}>{item.email}</Text>
-            <View style={styles.roleContainer}>
-              <View
-                style={[
-                  styles.roleBadge,
-                  { backgroundColor: `${getRoleColor(item.role)}20` }
-                ]}
-              >
-                <Text style={[styles.roleText, { color: getRoleColor(item.role) }]}>
-                  {getRoleText(item.role)}
-                </Text>
-              </View>
+          </Text>
+        </View>
+        <View style={styles.userDetails}>
+          <Text style={[styles.userName, { color: colors.text }]}>{item.name}</Text>
+          <Text style={[styles.userEmail, { color: colors.icon }]}>{item.email}</Text>
+          <View style={styles.roleContainer}>
+            <View 
+              style={[
+                styles.roleBadge, 
+                { backgroundColor: `${getRoleColor(item.role)}20` }
+              ]}
+            >
+              <Text style={[styles.roleText, { color: getRoleColor(item.role) }]}>
+                {getRoleText(item.role)}
+              </Text>
+            </View>
               {item.hourlyRate !== null && item.hourlyRate !== undefined && (
                   <Text style={[styles.hourlyRate, { color: colors.icon }]}>
                     CAD$ {item.hourlyRate.toFixed(2)}/h
                   </Text>
                )}
-            </View>
+              </View>
           </View>
         </View>
         <TouchableOpacity
@@ -441,7 +441,7 @@ export default function UsersScreen() {
               <Text style={[styles.modalTitle, { color: colors.text }]}>Criar Novo Usuário</Text>
               <TouchableOpacity onPress={closeCreateModal} style={styles.closeButton}>
                 <Ionicons name="close" size={28} color={colors.icon} />
-              </TouchableOpacity>
+          </TouchableOpacity>
             </View>
 
             {createUserError && (
@@ -496,7 +496,7 @@ export default function UsersScreen() {
                 <NativePicker.Item label="Gerente (Manager)" value="MANAGER" />
                 <NativePicker.Item label="Funcionário (Employee)" value="EMPLOYEE" />
               </NativePicker>
-            </View>
+      </View>
 
             {newUserRole === 'EMPLOYEE' && (
               <TextInput
@@ -550,14 +550,14 @@ export default function UsersScreen() {
               onChangeText={setNewUserProvince}
               autoCapitalize="words"
             />
-             <TextInput
+          <TextInput
               style={[styles.input, { color: colors.text, borderColor: colors.border }]}
               placeholder="CEP / Código Postal"
-              placeholderTextColor={colors.icon}
+            placeholderTextColor={colors.icon}
               value={newUserPostalCode}
               onChangeText={setNewUserPostalCode}
               autoCapitalize="characters"
-            />
+          />
             {/* --- End New Form Fields --- */}
 
             <TouchableOpacity
@@ -604,7 +604,7 @@ export default function UsersScreen() {
               <TouchableOpacity onPress={closeEditModal} style={styles.closeButton}>
                 <Ionicons name="close" size={28} color={colors.icon} />
               </TouchableOpacity>
-            </View>
+      </View>
 
             {editUserError && (
               <Text style={styles.errorText}>{editUserError}</Text>
@@ -652,8 +652,8 @@ export default function UsersScreen() {
                 keyboardType="numeric"
               />
             )}
-
-            <TouchableOpacity
+        
+        <TouchableOpacity
               style={[styles.button, styles.saveButton, { backgroundColor: colors.tint }]}
               onPress={handleUpdateUser}
               disabled={updatingUser}
@@ -663,14 +663,14 @@ export default function UsersScreen() {
               ) : (
                 <Text style={styles.buttonText}>Salvar Alterações</Text>
               )}
-            </TouchableOpacity>
-            <TouchableOpacity
+        </TouchableOpacity>
+        <TouchableOpacity
               style={[styles.button, styles.cancelButton, { borderColor: colors.border }]}
               onPress={closeEditModal}
               disabled={updatingUser}
-            >
+        >
               <Text style={[styles.buttonText, { color: colors.text }]}>Cancelar</Text>
-            </TouchableOpacity>
+        </TouchableOpacity>
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -700,11 +700,11 @@ export default function UsersScreen() {
         clearButtonMode="while-editing"
       />
 
-      <FlatList
-        data={filteredUsers}
-        renderItem={renderUserItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
+        <FlatList
+          data={filteredUsers}
+          renderItem={renderUserItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyListContainer}>
             <Text style={[styles.emptyListText, { color: colors.icon }]}>
@@ -829,7 +829,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   hourlyRate: {
-     fontSize: 12,
+    fontSize: 12,
      marginTop: 4,
   },
   editButton: {
@@ -937,7 +937,7 @@ const styles = StyleSheet.create({
   },
   unauthorizedText: {
      fontSize: 18,
-     textAlign: 'center',
+    textAlign: 'center',
      marginBottom: 20,
   },
   loadingContainer: {

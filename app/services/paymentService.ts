@@ -109,7 +109,7 @@ export type ConfirmPaymentRequest = {
  */
 export const fetchPayments = async (startDate?: Date, endDate?: Date, status?: string): Promise<PaymentsResponse> => {
    try {
-    let endpoint = '/mobile-payments';
+    let endpoint = '/api/mobile-payments';
     const params = new URLSearchParams();
 
     if (startDate) {
@@ -143,7 +143,7 @@ export const fetchPayments = async (startDate?: Date, endDate?: Date, status?: s
 export const fetchPaymentDetails = async (id: string): Promise<PaymentDetailResponse> => {
   try {
     return await apiRequest<PaymentDetailResponse>({
-      endpoint: `/mobile-payments/${id}`,
+      endpoint: `/api/mobile-payments/${id}`,
       method: 'GET',
     });
   } catch (error) {
@@ -160,7 +160,7 @@ export const fetchPaymentDetails = async (id: string): Promise<PaymentDetailResp
  */
 export const getUserBalance = async (userId?: string | null, startDate?: Date, endDate?: Date): Promise<UserBalanceResponse> => {
    try {
-     let endpoint = '/mobile-users/balance';
+     let endpoint = '/api/mobile-users/balance';
      const params = new URLSearchParams();
      
      if (userId) {
@@ -200,7 +200,7 @@ export const getUserBalance = async (userId?: string | null, startDate?: Date, e
      console.log('Creating payment with data:', paymentData);
      // Adjust response type to match API docs: { payment: { ... } }
      const response = await apiRequest<{ payment: Payment }>({
-       endpoint: '/mobile-payments', // Endpoint confirmed from docs
+       endpoint: '/api/mobile-payments', // Endpoint confirmed from docs
        method: 'POST',
        body: paymentData, // Send the updated CreatePaymentRequest structure
      });
@@ -216,7 +216,7 @@ export const getUserBalance = async (userId?: string | null, startDate?: Date, e
 // Confirmar recebimento de um pagamento
 export const confirmPayment = async (data: ConfirmPaymentRequest): Promise<{ success: boolean; message: string }> => {
   return await apiRequest<{ success: boolean; message: string }>({
-    endpoint: `/mobile-payments/${data.paymentId}/confirm`,
+    endpoint: `/api/mobile-payments/${data.paymentId}/confirm`,
     method: 'PUT',
     body: {
       confirmed: data.confirmed,
@@ -236,7 +236,7 @@ export const fetchUnpaidTimeEntries = async (userId: string): Promise<TimeEntry[
       unpaid: 'true',
       limit: '500' // Fetch a large number, assuming pagination isn't needed here
     });
-    const endpoint = `/mobile-time-entries?${params.toString()}`;
+    const endpoint = `/api/mobile-time-entries?${params.toString()}`;
 
     const response = await apiRequest<{ timeEntries: TimeEntry[] }>({
       endpoint,
@@ -274,7 +274,7 @@ export const fetchCompanyPayments = async (params: {
   sortOrder?: string;
 } = {}): Promise<PaymentsResponse> => {
   try {
-    const endpoint = '/mobile-admin/payments';
+    const endpoint = '/api/mobile-admin/payments';
     const queryParams = new URLSearchParams();
 
     if (params.status) {
