@@ -764,18 +764,13 @@ Authorization: Bearer ... (Token de Admin ou Manager)
 
 **Endpoint:** `/mobile-users/balance`
 
-**Método:** `GET`
+**Descrição:** Retorna o saldo atual do usuário, incluindo horas aprovadas, pagas e não pagas.
 
-**Headers:**
-```
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
+**Parâmetros de Consulta (opcionais):**
+- `startDate`: Data inicial no formato YYYY-MM-DD
+- `endDate`: Data final no formato YYYY-MM-DD
 
-**Query Parameters (opcionais):**
-- `startDate`: Data inicial no formato ISO (YYYY-MM-DD)
-- `endDate`: Data final no formato ISO (YYYY-MM-DD)
-
-Se não especificado, retorna o saldo do mês atual.
+Se não especificado, retorna o saldo total sem filtro de data.
 
 **Resposta de Sucesso (200):**
 ```json
@@ -791,8 +786,8 @@ Se não especificado, retorna o saldo do mês atual.
     "currency": "BRL"
   },
   "period": {
-    "startDate": "2023-04-01",
-    "endDate": "2023-04-30"
+    "startDate": "YYYY-MM-DD ou 'sem data inicial'",
+    "endDate": "YYYY-MM-DD ou 'sem data final'"
   }
 }
 ```
@@ -2238,3 +2233,165 @@ export default BalanceScreen;
 ## Suporte
 
 Para questões e problemas relacionados à API, entre em contato com a equipe de desenvolvimento do ModularCompany através do e-mail fabricappsdrumblow@gmail.com ou abra uma issue no repositório do projeto. 
+
+### Listar Pagamentos do Usuário
+
+**Endpoint:** `GET /api/mobile-payments`
+
+**Descrição:** Lista os pagamentos do usuário autenticado.
+
+**Parâmetros de Consulta:**
+- `startDate` (opcional): Data inicial no formato YYYY-MM-DD
+- `endDate` (opcional): Data final no formato YYYY-MM-DD
+- `status` (opcional): Filtrar por status específico (pending, awaiting_confirmation, completed, cancelled)
+
+**Resposta de Sucesso:**
+```json
+{
+  "payments": [
+    {
+      "id": "string",
+      "amount": "number",
+      "date": "YYYY-MM-DD",
+      "description": "string",
+      "reference": "string",
+      "paymentMethod": "string",
+      "status": "string",
+      "periodStart": "YYYY-MM-DD",
+      "periodEnd": "YYYY-MM-DD",
+      "totalHours": "number",
+      "createdBy": {
+        "id": "string",
+        "name": "string"
+      },
+      "timeEntries": [
+        {
+          "id": "string",
+          "date": "YYYY-MM-DD",
+          "totalHours": "number",
+          "observation": "string",
+          "project": "string",
+          "amount": "number"
+        }
+      ],
+      "createdAt": "YYYY-MM-DDTHH:mm:ss",
+      "updatedAt": "YYYY-MM-DDTHH:mm:ss"
+    }
+  ],
+  "period": {
+    "startDate": "YYYY-MM-DD ou 'sem data inicial'",
+    "endDate": "YYYY-MM-DD ou 'sem data final'"
+  }
+}
+```
+
+### Listar Pagamentos da Empresa (Admin/Manager)
+
+**Endpoint:** `GET /api/mobile-admin/payments`
+
+**Descrição:** Lista os pagamentos de todos os usuários da empresa (apenas para Admin/Manager).
+
+**Parâmetros de Consulta:**
+- `startDate` (opcional): Data inicial no formato YYYY-MM-DD
+- `endDate` (opcional): Data final no formato YYYY-MM-DD
+- `status` (opcional): Filtrar por status específico (pending, awaiting_confirmation, completed, cancelled)
+- `userId` (opcional): Filtrar por usuário específico
+- `page` (opcional): Número da página (padrão: 1)
+- `limit` (opcional): Itens por página (padrão: 50)
+- `sortBy` (opcional): Campo para ordenação (date, amount, status)
+- `sortOrder` (opcional): Ordem da ordenação (asc, desc)
+
+**Resposta de Sucesso:**
+```json
+{
+  "payments": [
+    {
+      "id": "string",
+      "amount": "number",
+      "date": "YYYY-MM-DD",
+      "description": "string",
+      "reference": "string",
+      "paymentMethod": "string",
+      "status": "string",
+      "confirmedAt": "YYYY-MM-DDTHH:mm:ss",
+      "periodStart": "YYYY-MM-DD",
+      "periodEnd": "YYYY-MM-DD",
+      "user": {
+        "id": "string",
+        "name": "string",
+        "email": "string"
+      },
+      "creator": {
+        "id": "string",
+        "name": "string"
+      }
+    }
+  ],
+  "pagination": {
+    "total": "number",
+    "page": "number",
+    "limit": "number",
+    "pages": "number"
+  },
+  "appliedFilters": {
+    "status": "string",
+    "userId": "string",
+    "startDate": "YYYY-MM-DD",
+    "endDate": "YYYY-MM-DD",
+    "sortBy": "string",
+    "sortOrder": "string"
+  }
+}
+```
+
+### Resumo do Dashboard (Admin/Manager)
+
+**Endpoint:** `/mobile-admin/dashboard-summary`
+
+**Método:** `GET`
+
+**Headers:**
+```
+Authorization: Bearer ... (Token de Admin ou Manager)
+```
+
+**Descrição:** Retorna um resumo rápido de dados relevantes para o dashboard de um Administrador ou Gerente, focado na visão da empresa.
+
+**Parâmetros de Consulta:** Nenhum.
+
+**Resposta de Sucesso (200):**
+```json
+{
+  "dashboard": {
+    "summary": {
+      "pendingApprovalCount": 15, // Número de registros de horas pendentes na empresa
+      "totalUserCount": 50,     // Número total de usuários na empresa
+      "unreadNotificationCount": 3, // Número de notificações não lidas PARA o admin/manager logado
+      "pendingPaymentCount": 5,   // Número total de pagamentos pendentes na empresa
+      "totalPaidAmountMonth": 12500.75, // Valor total pago no mês atual
+      "pendingPaymentAmountMonth": 2800.50 // Valor total estimado de horas aprovadas e não pagas trabalhadas no mês atual
+    },
+    "user": { 
+      "id": "uuid-do-admin",
+      "name": "Nome Admin/Manager",
+      "role": "ADMIN"
+    },
+    "company": { 
+      "id": "uuid-da-empresa",
+      "name": "Nome da Empresa"
+    }
+  }
+}
+```
+
+**Respostas de Erro:**
+- **401 Unauthorized:** Token inválido ou expirado.
+- **403 Forbidden:** Usuário não tem permissão (não é Admin/Manager).
+- **400 Bad Request:** Usuário autenticado não está associado a uma empresa.
+- **500 Internal Server Error:** Erro inesperado no servidor.
+
+--- 
+
+## Implementação no React Native
+// ... existing code ...
+}

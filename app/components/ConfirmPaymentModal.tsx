@@ -13,7 +13,7 @@ import {
   Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { confirmPayment } from '../services/paymentService';
+import { confirmPayment } from '../../services/paymentService';
 
 type ConfirmPaymentModalProps = {
   isVisible: boolean;

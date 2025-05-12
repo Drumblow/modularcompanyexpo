@@ -16,7 +16,7 @@ import {
   getCurrentUserData,
   updateUser,       // Added updateUser
   UpdateUserData    // Added UpdateUserData
-} from '../services/userService';
+} from '../../services/userService';
 import { Picker as NativePicker } from '@react-native-picker/picker'; // For Role selection
 
 // Use SelectableUser which matches the API response for listing

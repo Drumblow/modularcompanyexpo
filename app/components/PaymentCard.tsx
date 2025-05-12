@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Payment } from '../services/paymentService';
+import { Payment } from '../../services/paymentService';
 
 type PaymentCardProps = {
   payment: Payment;

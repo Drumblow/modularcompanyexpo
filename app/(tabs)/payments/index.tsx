@@ -35,8 +35,8 @@ import {
   fetchUnpaidTimeEntries,
   TimeEntry,
   fetchCompanyPayments
-} from '../../services/paymentService';
-import { fetchCompanyUsers, SelectableUser } from '../../services/userService';
+} from '../../../services/paymentService';
+import { fetchCompanyUsers, SelectableUser } from '../../../services/userService';
 import PaymentCard from '../../components/PaymentCard';
 import BalanceCard from '../../components/BalanceCard';
 import { Picker as NativePicker } from '@react-native-picker/picker';
@@ -48,6 +48,149 @@ const dateToString = (date: Date): string => {
 };
 
 type PaymentTab = 'pending' | 'completed' | 'received';
+
+// Adicionar tipos para os filtros de período
+type PeriodFilter = 'all' | '30days' | '60days' | 'custom';
+type FilterType = 'period' | 'employee';
+
+// Componente de Filtro Reutilizável
+const FilterButton = ({ 
+  label, 
+  isActive, 
+  onPress 
+}: { 
+  label: string; 
+  isActive: boolean; 
+  onPress: () => void;
+}) => (
+  <TouchableOpacity
+    style={[styles.filterButton, isActive && styles.activeFilterButton]}
+    onPress={onPress}
+  >
+    <Text style={[styles.filterButtonText, isActive && styles.activeFilterButtonText]}>
+      {label}
+    </Text>
+  </TouchableOpacity>
+);
+
+// Componente de Filtro de Período
+const PeriodFilterComponent = ({ 
+  periodFilter, 
+  setPeriodFilter,
+  customStartDate,
+  customEndDate,
+  setCustomStartDate,
+  setCustomEndDate,
+  showCustomDatePicker,
+  setShowCustomDatePicker
+}: {
+  periodFilter: PeriodFilter;
+  setPeriodFilter: (filter: PeriodFilter) => void;
+  customStartDate: Date | null;
+  customEndDate: Date | null;
+  setCustomStartDate: (date: Date | null) => void;
+  setCustomEndDate: (date: Date | null) => void;
+  showCustomDatePicker: 'start' | 'end' | null;
+  setShowCustomDatePicker: (type: 'start' | 'end' | null) => void;
+}) => (
+  <View style={styles.filterContainer}>
+    <View style={styles.filterRow}>
+      <FilterButton 
+        label="Todos" 
+        isActive={periodFilter === 'all'} 
+        onPress={() => setPeriodFilter('all')} 
+      />
+      <FilterButton 
+        label="30 Dias" 
+        isActive={periodFilter === '30days'} 
+        onPress={() => setPeriodFilter('30days')} 
+      />
+      <FilterButton 
+        label="60 Dias" 
+        isActive={periodFilter === '60days'} 
+        onPress={() => setPeriodFilter('60days')} 
+      />
+      <FilterButton 
+        label="Personalizado" 
+        isActive={periodFilter === 'custom'} 
+        onPress={() => setPeriodFilter('custom')} 
+      />
+    </View>
+
+    {periodFilter === 'custom' && (
+      <View style={styles.customDateContainer}>
+        <TouchableOpacity
+          style={styles.dateInput}
+          onPress={() => setShowCustomDatePicker('start')}
+        >
+          <Text style={styles.dateInputText}>
+            {customStartDate ? format(customStartDate, 'dd/MM/yyyy') : 'Data Inicial'}
+          </Text>
+        </TouchableOpacity>
+        <Text style={styles.dateSeparator}>até</Text>
+        <TouchableOpacity
+          style={styles.dateInput}
+          onPress={() => setShowCustomDatePicker('end')}
+        >
+          <Text style={styles.dateInputText}>
+            {customEndDate ? format(customEndDate, 'dd/MM/yyyy') : 'Data Final'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    )}
+
+    {showCustomDatePicker && (
+      <DateTimePicker
+        value={showCustomDatePicker === 'start' ? (customStartDate || new Date()) : (customEndDate || new Date())}
+        mode="date"
+        display="default"
+        onChange={(event, selectedDate) => {
+          setShowCustomDatePicker(null);
+          if (selectedDate) {
+            if (showCustomDatePicker === 'start') {
+              setCustomStartDate(selectedDate);
+            } else {
+              setCustomEndDate(selectedDate);
+            }
+          }
+        }}
+      />
+    )}
+  </View>
+);
+
+// Componente de Filtro de Funcionário
+const EmployeeFilterComponent = ({
+  selectedUserId,
+  setSelectedUserId,
+  filterableUsers
+}: {
+  selectedUserId: string;
+  setSelectedUserId: (id: string) => void;
+  filterableUsers: SelectableUser[];
+}) => (
+  <View style={styles.filterContainer}>
+    <View style={styles.filterRow}>
+      <Text style={styles.filterButtonText}>Filtrar por Funcionário:</Text>
+      <View style={styles.dateInput}>
+        <NativePicker
+          selectedValue={selectedUserId}
+          onValueChange={(value) => setSelectedUserId(value)}
+          style={{ width: '100%' }}
+        >
+          <NativePicker.Item label="Todos" value="" />
+          {filterableUsers.map((user) => (
+            <NativePicker.Item
+              key={user.id}
+              label={user.name}
+              value={user.id}
+            />
+          ))}
+        </NativePicker>
+      </View>
+    </View>
+  </View>
+);
 
 export default function PaymentsScreen() {
   const router = useRouter();
@@ -97,8 +240,13 @@ export default function PaymentsScreen() {
   const [filterableUsers, setFilterableUsers] = useState<SelectableUser[]>([]);
   const [selectedFilterUserId, setSelectedFilterUserId] = useState<string>(''); // Empty string for "All"
   const [loadingFilterUsers, setLoadingFilterUsers] = useState(false);
-  // --- End States for Lists & Tabs ---
-  
+
+  // Estados para filtros de período
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all');
+  const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
+  const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState<'start' | 'end' | null>(null);
+
   // Determine if the current user is an Admin or Manager
   const isAdminOrManager = useMemo(() => userRole && ['ADMIN', 'MANAGER'].includes(userRole.toUpperCase()), [userRole]);
   const canCreatePayment = isAdminOrManager; // Alias for clarity
@@ -112,9 +260,41 @@ export default function PaymentsScreen() {
     }
   }, [isAdminOrManager]);
 
-  // --- Data Loading Logic ---
+  // Função para calcular datas baseadas no filtro selecionado
+  const getFilterDates = useCallback(() => {
+    const today = new Date();
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
+
+    switch (periodFilter) {
+      case '30days':
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 30);
+        endDate = today;
+        break;
+      case '60days':
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 60);
+        endDate = today;
+        break;
+      case 'custom':
+        if (customStartDate && customEndDate) {
+          startDate = customStartDate;
+          endDate = customEndDate;
+        }
+        break;
+      case 'all':
+      default:
+        // Não define datas para mostrar todos os registros
+        break;
+    }
+
+    return { startDate, endDate };
+  }, [periodFilter, customStartDate, customEndDate]);
+
+  // Modificar loadTabData para usar os filtros
   const loadTabData = useCallback(async (tab: PaymentTab, filterUserId: string = '') => {
-    if (!userRole) return; 
+    if (!userRole) return;
 
     // Set loading state
     switch (tab) {
@@ -122,24 +302,32 @@ export default function PaymentsScreen() {
       case 'pending': setLoadingPending(true); setErrorPending(null); break;
       case 'completed': setLoadingCompleted(true); setErrorCompleted(null); break;
     }
-      setRefreshing(false);
+    setRefreshing(false);
 
     try {
       let response: PaymentsResponse | null = null;
       let balance: UserBalanceResponse | null = null;
 
       if (tab === 'received') {
-        response = await fetchPayments(); 
-        balance = await getUserBalance(); 
+        const { startDate, endDate } = getFilterDates();
+        response = await fetchPayments(startDate || undefined, endDate || undefined);
+        balance = await getUserBalance(null, startDate || undefined, endDate || undefined);
         setMyReceivedPayments(response.payments || []);
         setBalanceData(balance);
       } else if (isAdminOrManager) {
         const statusFilter = tab === 'pending' ? 'pending' : 'completed';
-        // Include userId in params if filtering pending tab and a user is selected
-        const apiParams: any = { status: statusFilter }; 
+        const apiParams: any = { status: statusFilter };
+        
+        // Adicionar filtro de funcionário apenas para a aba de pendentes
         if (tab === 'pending' && filterUserId) {
-           apiParams.userId = filterUserId;
+          apiParams.userId = filterUserId;
         }
+
+        // Adicionar filtros de período para todas as abas
+        const { startDate, endDate } = getFilterDates();
+        if (startDate) apiParams.startDate = startDate;
+        if (endDate) apiParams.endDate = endDate;
+
         response = await fetchCompanyPayments(apiParams);
         if (tab === 'pending') {
           setPendingCompanyPayments(response.payments || []);
@@ -147,7 +335,6 @@ export default function PaymentsScreen() {
           setCompletedCompanyPayments(response.payments || []);
         }
       }
-      
     } catch (err: any) {
       console.error(`Erro ao carregar dados da aba ${tab} (Filtro: ${filterUserId}):`, err);
       const errorMsg = `Não foi possível carregar os dados (${tab}). Tente novamente.`;
@@ -158,9 +345,9 @@ export default function PaymentsScreen() {
       }
       // Clear data
       switch (tab) {
-          case 'received': setMyReceivedPayments([]); setBalanceData(null); break;
-          case 'pending': setPendingCompanyPayments([]); break;
-          case 'completed': setCompletedCompanyPayments([]); break;
+        case 'received': setMyReceivedPayments([]); setBalanceData(null); break;
+        case 'pending': setPendingCompanyPayments([]); break;
+        case 'completed': setCompletedCompanyPayments([]); break;
       }
     } finally {
       // Reset loading state
@@ -170,15 +357,14 @@ export default function PaymentsScreen() {
         case 'completed': setLoadingCompleted(false); break;
       }
     }
-  }, [userRole, isAdminOrManager]); // Keep dependencies minimal
+  }, [userRole, isAdminOrManager, getFilterDates]);
 
-  // Load data when active tab or filter changes
+  // Atualizar useEffect para recarregar dados quando os filtros mudarem
   useEffect(() => {
-    if (userRole) { 
-      // Pass the selectedFilterUserId only when loading the pending tab
+    if (userRole) {
       loadTabData(activeTab, activeTab === 'pending' ? selectedFilterUserId : '');
     }
-  }, [activeTab, userRole, selectedFilterUserId, loadTabData]); // Add selectedFilterUserId
+  }, [activeTab, userRole, selectedFilterUserId, periodFilter, customStartDate, customEndDate, loadTabData]);
 
   // Fetch user role and filterable users on component mount for Admin/Manager
   useEffect(() => {
@@ -502,17 +688,103 @@ export default function PaymentsScreen() {
 
   const { data: currentPayments, loading: currentLoading, error: currentError } = getCurrentTabData();
 
+  // Função para renderizar os filtros de período
+  const renderPeriodFilters = () => {
+    if (activeTab !== 'received') return null;
+
+    return (
+      <View style={styles.filterContainer}>
+        <View style={styles.filterRow}>
+          <TouchableOpacity
+            style={[styles.filterButton, periodFilter === 'all' && styles.activeFilterButton]}
+            onPress={() => setPeriodFilter('all')}
+          >
+            <Text style={[styles.filterButtonText, periodFilter === 'all' && styles.activeFilterButtonText]}>
+              Todos
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterButton, periodFilter === '30days' && styles.activeFilterButton]}
+            onPress={() => setPeriodFilter('30days')}
+          >
+            <Text style={[styles.filterButtonText, periodFilter === '30days' && styles.activeFilterButtonText]}>
+              30 Dias
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterButton, periodFilter === '60days' && styles.activeFilterButton]}
+            onPress={() => setPeriodFilter('60days')}
+          >
+            <Text style={[styles.filterButtonText, periodFilter === '60days' && styles.activeFilterButtonText]}>
+              60 Dias
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterButton, periodFilter === 'custom' && styles.activeFilterButton]}
+            onPress={() => setPeriodFilter('custom')}
+          >
+            <Text style={[styles.filterButtonText, periodFilter === 'custom' && styles.activeFilterButtonText]}>
+              Personalizado
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {periodFilter === 'custom' && (
+          <View style={styles.customDateContainer}>
+            <TouchableOpacity
+              style={styles.dateInput}
+              onPress={() => setShowCustomDatePicker('start')}
+            >
+              <Text style={styles.dateInputText}>
+                {customStartDate ? format(customStartDate, 'dd/MM/yyyy') : 'Data Inicial'}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.dateSeparator}>até</Text>
+            <TouchableOpacity
+              style={styles.dateInput}
+              onPress={() => setShowCustomDatePicker('end')}
+            >
+              <Text style={styles.dateInputText}>
+                {customEndDate ? format(customEndDate, 'dd/MM/yyyy') : 'Data Final'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {showCustomDatePicker && (
+          <DateTimePicker
+            value={showCustomDatePicker === 'start' ? (customStartDate || new Date()) : (customEndDate || new Date())}
+            mode="date"
+            display="default"
+            onChange={(event, selectedDate) => {
+              setShowCustomDatePicker(null);
+              if (selectedDate) {
+                if (showCustomDatePicker === 'start') {
+                  setCustomStartDate(selectedDate);
+                } else {
+                  setCustomEndDate(selectedDate);
+                }
+              }
+            }}
+          />
+        )}
+      </View>
+    );
+  };
+
   // Render Header conditionally based on tab
   const renderListHeader = () => {
-    if (activeTab === 'received' && balanceData) {
-    return (
-        <View style={styles.headerContainer}>
-          <BalanceCard balanceData={balanceData} />
-          {currentPayments.length > 0 && <Text style={styles.sectionTitle}>Histórico</Text>}
-        </View>
+    // Only render header components for the 'received' tab
+    if (activeTab === 'received') {
+      return (
+        <>
+          {balanceData && <BalanceCard balanceData={balanceData} />}
+          {renderPeriodFilters()} 
+        </>
       );
     }
-    return null; // No header for admin tabs for now
+    // Return null for other tabs (pending, completed) as filters are rendered elsewhere
+    return null;
   };
 
   // Render Empty Component based on tab
@@ -533,24 +805,28 @@ export default function PaymentsScreen() {
   // Render the Employee Filter Picker (only for Admin/Manager on Pending tab)
   const renderEmployeeFilter = () => {
     if (!isAdminOrManager || activeTab !== 'pending') return null;
-    
+
     return (
-      <View style={styles.filterContainer}>
-        <Text style={styles.filterLabel}>Filtrar por Funcionário:</Text>
-        <View style={styles.filterPickerContainer}>
-          <NativePicker
-            selectedValue={selectedFilterUserId}
-            onValueChange={(itemValue) => setSelectedFilterUserId(itemValue || '')}
-            style={styles.filterPicker}
-            enabled={!loadingPending && !loadingFilterUsers} // Disable while loading users or payments
-          >
-            <NativePicker.Item label="Todos os Funcionários" value="" />
-            {filterableUsers.map((user) => (
-              <NativePicker.Item key={user.id} label={user.name} value={user.id} />
-            ))}
-          </NativePicker>
+      <View style={[styles.filterContainer, { marginTop: 16 }]}>
+        <View style={styles.filterRow}>
+          <Text style={styles.filterButtonText}>Filtrar por Funcionário:</Text>
+          <View style={styles.dateInput}>
+            <NativePicker
+              selectedValue={selectedFilterUserId}
+              onValueChange={(value) => setSelectedFilterUserId(value)}
+              style={{ width: '100%' }}
+            >
+              <NativePicker.Item label="Todos" value="" />
+              {filterableUsers.map((user) => (
+                <NativePicker.Item
+                  key={user.id}
+                  label={user.name}
+                  value={user.id}
+                />
+              ))}
+            </NativePicker>
+          </View>
         </View>
-        {loadingFilterUsers && <ActivityIndicator size="small" color="#0284c7" style={{ marginLeft: 10 }}/>}
       </View>
     );
   };
@@ -765,8 +1041,8 @@ export default function PaymentsScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Pagamentos</Text>
         {canCreatePayment && (
-          <TouchableOpacity style={styles.addButton} onPress={openModal} >
-            <Ionicons name="add" size={24} color="#ffffff" />
+          <TouchableOpacity style={styles.createButton} onPress={openModal} >
+            <Text style={styles.createButtonText}>Adicionar</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -774,21 +1050,18 @@ export default function PaymentsScreen() {
       {/* Tab Bar for Admin/Manager */}
       {renderTabBar()}
 
-      {/* Employee Filter for Pending Tab */}
-      {renderEmployeeFilter()}
-
       {/* Content Area */}
       <View style={styles.container}>
         {/* Loading Indicator for the active tab */}
         {currentLoading && !refreshing && (
-          <View style={styles.centered}>
+          <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#0284c7" />
           </View>
         )}
         
         {/* Error Display for the active tab */}
         {currentError && !currentLoading && (
-            <View style={styles.centered}>
+            <View style={styles.errorContainer}>
                 <Ionicons name="alert-circle" size={50} color="#dc2626" />
                 <Text style={styles.errorText}>{currentError}</Text>
                 <TouchableOpacity style={styles.retryButton} onPress={() => loadTabData(activeTab, activeTab === 'pending' ? selectedFilterUserId : '')}> 
@@ -796,6 +1069,9 @@ export default function PaymentsScreen() {
                 </TouchableOpacity>
             </View>
         )}
+
+        {/* Conditionally render Employee Filter for Pending tab */}
+        {isAdminOrManager && activeTab === 'pending' && renderEmployeeFilter()}
 
         {/* Payment List for the active tab */}
         {!currentLoading && !currentError && (
@@ -828,11 +1104,11 @@ export default function PaymentsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f8f9fa',
   },
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f8f9fa',
   },
   header: {
     flexDirection: 'row',
@@ -840,47 +1116,126 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
-    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 1.5,
+    shadowRadius: 4,
+    elevation: 3,
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#0f172a',
+    fontWeight: '600',
+    color: '#1a202c',
   },
-  addButton: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
+  createButton: {
+    backgroundColor: '#0A7EA4',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 18,
-    backgroundColor: '#0284c7',
   },
-  centered: {
+  createButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  filterContainer: {
+    padding: 10,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    marginBottom: 10,
+    marginHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  filterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  activeFilterButton: {
+    backgroundColor: '#0A7EA4',
+  },
+  filterButtonText: {
+    color: '#666',
+    fontSize: 14,
+  },
+  activeFilterButtonText: {
+    color: '#fff',
+  },
+  customDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    gap: 8,
+  },
+  dateInput: {
+    flex: 1,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+  },
+  dateInputText: {
+    color: '#333',
+    textAlign: 'center',
+  },
+  dateSeparator: {
+    color: '#666',
+    marginHorizontal: 5,
+  },
+  listContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    padding: 16,
+    padding: 20,
   },
-  loadingText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#64748b',
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
     textAlign: 'center',
+    marginTop: 10,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   errorText: {
-    marginTop: 12,
     fontSize: 16,
     color: '#dc2626',
     textAlign: 'center',
-    marginBottom: 16,
+    marginTop: 10,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   retryButton: {
     backgroundColor: '#0284c7',
@@ -893,69 +1248,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
-  headerContainer: {
-    paddingTop: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#334155',
-    marginTop: 8,
-    marginBottom: 4,
-    paddingHorizontal: 16,
-  },
-  list: {
-    paddingBottom: 20,
-  },
   emptyList: {
     flexGrow: 1,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    minHeight: 300,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#64748b',
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptySubtext: {
-    fontSize: 16,
-    color: '#94a3b8',
-    textAlign: 'center',
-  },
   modalOverlay: {
     flex: 1,
-    justifyContent: 'flex-end',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '85%',
-    paddingTop: 10,
+    borderRadius: 12,
+    padding: 20,
+    width: '90%',
+    maxHeight: '80%',
   },
   scrollViewContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    flexGrow: 1,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
-    paddingTop: 10,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    color: '#1a202c',
   },
   closeButton: {
     padding: 5,
@@ -990,17 +1311,6 @@ const styles = StyleSheet.create({
   picker: {
     height: 50, 
      width: '100%',
-  },
-  dateInput: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: '#f9f9f9',
   },
   submitButton: {
     backgroundColor: '#007AFF',
@@ -1100,12 +1410,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
   readOnlyInput: {
      backgroundColor: '#e9ecef',
      color: '#495057',
@@ -1118,57 +1422,31 @@ const styles = StyleSheet.create({
   },
   tabBarContainer: {
     flexDirection: 'row',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
-    elevation: 1,
   },
   tabItem: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-    borderBottomWidth: 3,
+    borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   tabItemActive: {
-    borderBottomColor: '#0284c7',
+    borderBottomColor: '#0A7EA4',
   },
   tabLabel: {
     fontSize: 14,
-    color: '#64748b',
-    fontWeight: '500',
+    color: '#666',
   },
   tabLabelActive: {
-    color: '#0284c7',
+    color: '#0A7EA4',
     fontWeight: '600',
   },
-  filterContainer: {
-     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#f1f5f9',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#475569',
-    marginRight: 8,
-  },
-  filterPickerContainer: {
-    flex: 1,
-    height: 40,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    justifyContent: 'center',
-  },
-  filterPicker: {
-    width: '100%',
-    height: '100%',
+  list: {
+    paddingBottom: 20,
   },
 }); 

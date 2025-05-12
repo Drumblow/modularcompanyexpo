@@ -1,22 +1,29 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Ionicons } from '@expo/vector-icons';
-import { UserBalanceResponse } from '../services/paymentService';
+import { UserBalanceResponse } from '../../services/paymentService';
 
 type BalanceCardProps = {
   balanceData: UserBalanceResponse;
 };
 
 export default function BalanceCard({ balanceData }: BalanceCardProps) {
-  // Formatar datas do período
-  const formatDate = (dateString: string) => {
-    return format(parseISO(dateString), 'dd/MM/yyyy', { locale: ptBR });
+  // Formatar datas do período, tratando valores inválidos
+  const formatDate = (dateString: string | null | undefined): string => {
+    if (!dateString) {
+      return 'N/D'; // Retorna N/D se a string for nula ou undefined
+    }
+    const parsedDate = parseISO(dateString);
+    if (isValid(parsedDate)) {
+      return format(parsedDate, 'dd/MM/yyyy', { locale: ptBR });
+    }
+    return dateString; // Retorna a string original se não for uma data ISO válida
   };
   
-  const startDate = formatDate(balanceData.period.startDate);
-  const endDate = formatDate(balanceData.period.endDate);
+  const startDate = formatDate(balanceData?.period?.startDate);
+  const endDate = formatDate(balanceData?.period?.endDate);
   
   // Obter largura da tela para ajustes responsivos
   const screenWidth = Dimensions.get('window').width;
@@ -51,6 +58,11 @@ export default function BalanceCard({ balanceData }: BalanceCardProps) {
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{balanceData.balance.unpaidHours}h</Text>
             <Text style={styles.statLabel}>Horas não pagas</Text>
+          </View>
+          
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>R$ {balanceData.balance.totalPaid.toFixed(2).replace('.', ',')}</Text>
+            <Text style={styles.statLabel}>Total recebido</Text>
           </View>
           
           <View style={styles.statItem}>
@@ -117,7 +129,7 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
   },
   statsRowSmall: {
     flexDirection: 'column',

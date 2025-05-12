@@ -14,8 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-import { fetchPaymentDetails, Payment, TimeEntry, confirmPayment } from './services/paymentService';
-import { getCurrentUserId } from './services/userService';
+import { fetchPaymentDetails, Payment, TimeEntry, confirmPayment } from '../services/paymentService';
+import { getCurrentUserId } from '../services/userService';
 import ConfirmPaymentModal from './components/ConfirmPaymentModal';
 
 type PaymentTimeEntry = Pick<
